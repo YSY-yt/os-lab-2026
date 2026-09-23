@@ -1,0 +1,18 @@
+# 统一行尾为 LF
+#
+# 课程发放的 labN.zip 中，部分文件是 CRLF 行尾（例如 Makefile 是 LF、
+# 其余源码是 CRLF，混合在一起）。CRLF 在 Linux/WSL 下会导致：
+#   - tools/function.mk 被 Makefile include 后，变量值尾随 \r，污染命令行
+#   - tools/kernel.ld 链接脚本解析异常
+# 因此统一规范化为 LF。此设置不改变任何代码语义。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
