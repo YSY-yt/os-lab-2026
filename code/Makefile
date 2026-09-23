@@ -156,6 +156,10 @@ TARGETS: $(TARGETS)
 
 .DEFAULT_GOAL := TARGETS
 
+# 说明：原 Makefile 使用 -device loader,file=$(UCOREIMG),addr=0x80200000。
+# 该写法在 QEMU >= 8 下无效：QEMU 自带的 OpenSBI 已从 fw_jump 换为 fw_dynamic，
+# 跳转地址不再硬编码，必须由 QEMU 通过 -kernel 告知，否则 OpenSBI 会跳到 0x0，
+# 内核永远不会执行。故改为 -kernel $(UCOREIMG)。
 .PHONY: qemu 
 qemu: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 #	$(V)$(QEMU) -kernel $(UCOREIMG) -nographic
@@ -163,14 +167,14 @@ qemu: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 		-machine virt \
 		-nographic \
 		-bios default \
-		-device loader,file=$(UCOREIMG),addr=0x80200000
+		-kernel $(UCOREIMG)
 
 debug: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(QEMU) \
 		-machine virt \
 		-nographic \
 		-bios default \
-		-device loader,file=$(UCOREIMG),addr=0x80200000\
+		-kernel $(UCOREIMG)\
 		-s -S
 
 gdb:
