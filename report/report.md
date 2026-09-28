@@ -46,11 +46,12 @@
 
 | 组件 | 版本 / 包名 |
 |------|-------------|
-| 操作系统 | Ubuntu 24.04 LTS（WSL2） |
-| 交叉编译器 | `riscv64-unknown-elf-gcc` 13.2（`gcc-riscv64-unknown-elf`） |
-| 二进制工具 | `binutils-riscv64-unknown-elf` |
-| 模拟器 | `qemu-system-riscv64` 8.2（`qemu-system-misc`） |
-| 调试器 | `gdb-multiarch` 15.1（`target remote localhost:1234`） |
+| 操作系统 | Ubuntu 24.04.5 LTS（WSL2） |
+| 交叉编译器 | `riscv64-unknown-elf-gcc` 15.1.0 |
+| 二进制工具 | `riscv64-unknown-elf-ld` / `objcopy` / `objdump`（同一工具链） |
+| 工具链位置 | `~/riscv-lab/riscv-elf-toolchains/bin`（已加入 `PATH`） |
+| 模拟器 | `qemu-system-riscv64` 8.2.2（apt 包 `qemu-system-misc`） |
+| 调试器 | `riscv64-unknown-elf-gdb` 16.3.90（`target remote localhost:1234`） |
 
 **说明：**
 
@@ -205,7 +206,7 @@ riscv64-unknown-elf-gdb -ex 'file bin/kernel' -ex 'set arch riscv:rv64' -ex 'tar
 
 **（3）跟踪从复位到内核的完整过程**
 
-按指导书提示的三个阶段设置断点，避免在固件里单步跟过成千上万条指令：
+按指导书提示的三个阶段操作，避免在固件里单步跟过成千上万条指令：
 
 ```gdb
 # 阶段一：CPU 从复位地址 0x1000 开始执行
@@ -213,16 +214,21 @@ riscv64-unknown-elf-gdb -ex 'file bin/kernel' -ex 'set arch riscv:rv64' -ex 'tar
 (gdb) si                    # 单步几条，观察最初的几条指令做了什么
 (gdb) info registers pc
 
-# 阶段二：观察 OpenSBI 把内核加载到 0x80200000 的瞬间
-(gdb) watch *0x80200000     # 监视内核目标地址被写入的那一刻
-(gdb) continue
-
-# 阶段三：在控制权移交内核处中断
+# 阶段二：查看内核在内存中的状态，并在控制权移交处下断点
+(gdb) x/3i 0x80200000       # 复位时刻该地址处的内容
 (gdb) b *0x80200000
-(gdb) continue
-(gdb) info registers pc     # 应停在 0x80200000，即 kern_entry
+
+# 阶段三：让固件交出控制权，观察移交
+(gdb) continue              # 应命中 0x80200000，即 kern_entry
+(gdb) info registers pc sp  # 记录 pc 与 sp
 (gdb) x/5i $pc              # 确认第一条指令是 la sp, bootstacktop
 ```
+
+> **须知：指导书建议的 `watch *0x80200000` 在本实验环境中不会触发。**
+>
+> 指导书提示"可以使用 `watch *0x80200000` 观察内核加载瞬间"。实测该硬件监视点在 25 秒内始终未命中。原因是：使用 `-kernel`（以及原来的 `-device loader`）启动时，**内核镜像是 QEMU 在机器初始化阶段就写入内存的**，并不是由 OpenSBI 在运行过程中加载。因此在 GDB 连接上的那一刻（CPU 已被 `-S` 暂停在复位状态），`0x80200000` 处已经存放了完整的内核指令，此后不会再发生对该地址的写入，监视点自然无从触发。
+>
+> 所以本实验改用 `b *0x80200000` 断点来验证控制权移交，效果等价且可靠。
 
 #### 观察结果
 
@@ -230,12 +236,12 @@ riscv64-unknown-elf-gdb -ex 'file bin/kernel' -ex 'set arch riscv:rv64' -ex 'tar
 
 | 观察点 | 记录 |
 |--------|------|
-| 复位后 `pc` 的初值 | [待实测：预计 `0x0000000000001000`] |
-| 复位地址处前几条指令的地址与内容 | [待实测：`x/10i 0x1000` 的输出] |
-| 这前几条指令所在地址区间 | [待实测] |
-| 内核被加载到 `0x80200000` 的时刻（`watch` 命中） | [待实测：命中的指令与调用栈] |
-| 跳转后 `pc` 的值与首条内核指令 | [待实测：`0x80200000` 处的 `la sp, bootstacktop`] |
-| `sp` 在 `la sp, bootstacktop` 执行前后的变化 | [待实测：执行前为栈顶，执行后为 `bootstacktop` 的地址] |
+| 复位后 `pc` 的初值 | [待实测：`info registers pc` 的输出] |
+| 复位地址处前 10 条指令的地址与内容 | [待实测：`x/10i 0x1000` 的完整输出] |
+| 这批指令占据的地址区间 | [待实测：由上一行结果推断] |
+| 内核在复位时刻是否已在 `0x80200000` | [待实测：`x/3i 0x80200000` —— 用于验证"内核由 QEMU 预先加载"这一结论] |
+| 断点 `b *0x80200000` 命中时的 `pc` 与首条内核指令 | [待实测：应为 `pc = 0x80200000`，首条指令 `auipc sp,0x3`，即 `la sp, bootstacktop`] |
+| `sp` 在 `la sp, bootstacktop` 执行前后的值 | [待实测：`info registers sp`；执行后应为 `bootstacktop` 的地址] |
 
 #### 问题解答
 
@@ -260,7 +266,7 @@ riscv64-unknown-elf-gdb -ex 'file bin/kernel' -ex 'set arch riscv:rv64' -ex 'tar
 
 ![GDB 跟踪启动流程](./images/lab1_gdb.png)
 
-> 说明：lab1 的 `tools/` 目录下**没有 `grade.sh`**，`Makefile` 中也没有 `make grade` 目标，因此本实验没有自动评分脚本可运行，无法提供 `make grade` 的测试截图。本实验的验证方式为：内核能够被 QEMU 加载并正确输出启动信息（`make qemu`），以及通过 GDB 断点验证控制权确实在 `0x80200000` 处移交给内核（练习 2）。
+> 说明：lab1 没有自动评分脚本。`Makefile` 中虽然保留了从 ucore 模板继承下来的 `grade` 目标，但它的实现是 `$(SH) tools/grade.sh`，而 **`tools/grade.sh` 并未随 lab1 代码发放**（`code/tools/` 下只有 `function.mk` 与 `kernel.ld`）；该目标引用的 `TOUCH_FILES := kern/trap/trap.c` 在本实验中同样不存在（lab1 无 `kern/trap/` 目录）。因此 `make grade` 无法运行，无法提供对应的测试截图。本实验的验证方式为：内核能被 QEMU 加载并正确输出启动信息（`make qemu`），以及通过 GDB 断点在 `0x80200000` 处验证控制权确实移交给内核（练习 2）。
 
 ---
 
