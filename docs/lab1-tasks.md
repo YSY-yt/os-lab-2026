@@ -29,9 +29,12 @@
 
 ### 0.3 环境与三条避坑提醒
 
+> **如果你在自己的电脑上做**：请先按 [`docs/env-setup.md`](./env-setup.md) 把环境搭好，并把本文档后面命令里的代码路径换成你自己的（例如 `~/os-lab-2026/code`）。
+> 组长机器上的代码路径是 `/mnt/d/os-lab-2026/code`。
+
 **打开 Ubuntu 终端**：按 `Win` 键搜 `Ubuntu` 点开；或用 Windows Terminal 的下拉菜单选 `Ubuntu-24.04`；或 `Win+R` 输入 `wsl -d Ubuntu-24.04`。
 
-**代码在 WSL 里的路径**：`/mnt/d/os-lab-2026/code`
+**代码在 WSL 里的路径**：`/mnt/d/os-lab-2026/code`（组长机器）／`~/os-lab-2026/code`（自备电脑）
 
 ```bash
 cd /mnt/d/os-lab-2026/code
