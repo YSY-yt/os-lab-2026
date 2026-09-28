@@ -24,7 +24,10 @@ endif
 HOSTCC		:= gcc
 HOSTCFLAGS	:= -Wall -O2
 
-GDB		:= $(GCCPREFIX)gdb
+# 调试器：优先用工具链自带的 riscv64-unknown-elf-gdb；若系统中没有
+# （例如只通过 apt 安装了 gdb-multiarch），则回退到 gdb-multiarch。
+# 两者都支持 riscv:rv64 远程调试，都能连接 QEMU 的 gdb 调试桩。
+GDB		:= $(shell command -v riscv64-unknown-elf-gdb 2>/dev/null || command -v gdb-multiarch 2>/dev/null)
 
 CC		:= $(GCCPREFIX)gcc
 CFLAGS  := -mcmodel=medany -std=gnu99 -Wno-unused -Werror
@@ -178,7 +181,7 @@ debug: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 		-s -S
 
 gdb:
-	riscv64-unknown-elf-gdb \
+	$(GDB) \
     -ex 'file bin/kernel' \
     -ex 'set arch riscv:rv64' \
     -ex 'target remote localhost:1234'
