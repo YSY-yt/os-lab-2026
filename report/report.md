@@ -169,13 +169,16 @@ jalr  x0, t1, %pcrel_lo(kern_init) # 跳转到t1加低12位偏移得到的kern_i
 
 为了验证上述结论，可以用 `objdump` 反汇编内核，用 `nm` 查看符号地址。实际运行结果如下：
 
-
 ```asm
 0000000080200000 <kern_entry>:
     80200000:   00003117    auipc   sp,0x3
     80200004:   00010113    mv      sp,sp
     80200008:   a009        j       8020000a <kern_init>
 ```
+
+对应的终端截图如下：
+
+![反汇编验证 kern_entry 与 tail 指令](./images/lab1_objdump.png)
 
 `auipc sp,0x3` 把 PC 加上 `0x3000`，`mv sp,sp` 等价于 `addi sp,sp,0`，两者合起来对应 `la sp, bootstacktop`，最终 `sp = 0x80200000 + 0x3000 = 0x80203000`，即 `bootstacktop` 的地址。`j` 是 `jal x0, ...` 的别名，对应 `tail kern_init`，目标寄存器 `x0` 说明返回地址被丢弃，符合尾调用语义。
 
@@ -189,6 +192,10 @@ jalr  x0, t1, %pcrel_lo(kern_init) # 跳转到t1加低12位偏移得到的kern_i
 0000000080200000 T kern_entry
 000000008020000a T kern_init
 ```
+
+对应的终端截图如下：
+
+![nm 符号地址验证](./images/lab1_nm.png)
 
 `kern_entry` 位于 `0x80200000`，`kern_init` 位于 `0x8020000a`，`bootstack` 位于 `0x80201000`，`bootstacktop` 位于 `0x80203000`，与前面的分析一致。`T` 表示符号在 `.text` 段，`D` 表示在 `.data` 段。
 
