@@ -8,6 +8,7 @@
 
 - **lab1 任务分工与交付要求**：[`docs/lab1-tasks.md`](./docs/lab1-tasks.md)
 - **在自备电脑上搭建实验环境**：[`docs/env-setup.md`](./docs/env-setup.md)
+- **lab1 答辩复习材料**：[`docs/lab1-review.md`](./docs/lab1-review.md)
 
 ---
 
