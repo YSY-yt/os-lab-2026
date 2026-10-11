@@ -4,7 +4,10 @@
 
 实验指导书：<http://8.135.34.58/lab2026/_book/>
 
-各实验的小组内部分工与交付要求见 [`docs/`](./docs/) 目录：lab1 见 [`docs/lab1-tasks.md`](./docs/lab1-tasks.md)。
+各实验的小组内部分工与交付要求见 [`docs/`](./docs/) 目录：
+
+- **lab1 任务分工与交付要求**：[`docs/lab1-tasks.md`](./docs/lab1-tasks.md)
+- **在自备电脑上搭建实验环境**：[`docs/env-setup.md`](./docs/env-setup.md)
 
 ---
 
