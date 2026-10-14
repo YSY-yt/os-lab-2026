@@ -1,0 +1,249 @@
+PROJ	:= lab2
+EMPTY	:=
+SPACE	:= $(EMPTY) $(EMPTY)
+SLASH	:= /
+
+V       := @
+
+#ifndef GCCPREFIX
+GCCPREFIX := riscv64-unknown-elf-
+#endif
+
+ifndef QEMU
+QEMU := qemu-system-riscv64
+endif
+
+ifndef SPIKE
+SPIKE := spike
+endif
+
+# eliminate default suffix rules
+.SUFFIXES: .c .S .h
+
+# delete target files if there is an error (or make is interrupted)
+.DELETE_ON_ERROR:
+
+# define compiler and flags
+HOSTCC		:= gcc
+HOSTCFLAGS	:= -Wall -O2
+
+# 调试器：优先用工具链自带的 riscv64-unknown-elf-gdb；若系统中没有
+# （例如只通过 apt 安装了 gdb-multiarch），则回退到 gdb-multiarch。
+# 两者都支持 riscv:rv64 远程调试，都能连接 QEMU 的 gdb 调试桩。
+GDB		:= $(shell command -v riscv64-unknown-elf-gdb 2>/dev/null || command -v gdb-multiarch 2>/dev/null)
+
+CC		:= $(GCCPREFIX)gcc
+CFLAGS  := -mcmodel=medany -std=gnu99 -Wno-unused -Werror 
+CFLAGS	+= -fno-builtin -Wall -O2 -nostdinc $(DEFS)
+CFLAGS	+= -fno-stack-protector -ffunction-sections -fdata-sections
+CFLAGS	+= -g
+CFLAGS2 = $(CFLAGS) -D ucore_test
+CTYPE	:= c S
+LD      := $(GCCPREFIX)ld
+LDFLAGS	:= -m elf64lriscv
+LDFLAGS	+= -nostdlib --gc-sections
+
+OBJCOPY := $(GCCPREFIX)objcopy
+OBJDUMP := $(GCCPREFIX)objdump
+
+COPY	:= cp
+MKDIR   := mkdir -p
+MV		:= mv
+RM		:= rm -f
+AWK		:= awk
+SED		:= sed
+SH		:= sh
+TR		:= tr
+TOUCH	:= touch -c
+
+OBJDIR	:= obj
+BINDIR	:= bin
+
+ALLOBJS	:=
+ALLDEPS	:=
+TARGETS	:=
+
+include tools/function.mk
+
+listf_cc = $(call listf,$(1),$(CTYPE))
+
+# for cc
+add_files_cc = $(call add_files,$(1),$(CC),$(CFLAGS) $(3),$(2),$(4))
+add_files_cc2 = $(call add_files,$(1),$(CC),$(CFLAGS2) $(3),$(2),$(4))
+create_target_cc = $(call create_target,$(1),$(2),$(3),$(CC),$(CFLAGS))
+
+# for hostcc
+add_files_host = $(call add_files,$(1),$(HOSTCC),$(HOSTCFLAGS),$(2),$(3))
+create_target_host = $(call create_target,$(1),$(2),$(3),$(HOSTCC),$(HOSTCFLAGS))
+
+cgtype = $(patsubst %.$(2),%.$(3),$(1))
+objfile = $(call toobj,$(1))
+asmfile = $(call cgtype,$(call toobj,$(1)),o,asm)
+outfile = $(call cgtype,$(call toobj,$(1)),o,out)
+symfile = $(call cgtype,$(call toobj,$(1)),o,sym)
+
+# for match pattern
+match = $(shell echo $(2) | $(AWK) '{for(i=1;i<=NF;i++){if(match("$(1)","^"$$(i)"$$")){exit 1;}}}'; echo $$?)
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# include kernel/user
+
+INCLUDE	+= libs/
+
+CFLAGS	+= $(addprefix -I,$(INCLUDE))
+
+LIBDIR	+= libs
+
+$(call add_files_cc,$(call listf_cc,$(LIBDIR)),libs,)
+
+# -------------------------------------------------------------------
+# kernel
+
+KINCLUDE	+= kern/debug/ \
+			   kern/driver/ \
+			   kern/mm/ \
+			   kern/arch/
+
+KSRCDIR		+= kern/init \
+			   kern/libs \
+			   kern/debug \
+			   kern/driver \
+			   kern/mm
+
+KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
+
+ifeq ($(MAKECMDGOALS),test)
+$(call add_files_cc2,$(call listf_cc,$(KSRCDIR)),kernel,$(KCFLAGS))
+else
+$(call add_files_cc,$(call listf_cc,$(KSRCDIR)),kernel,$(KCFLAGS))
+endif
+KOBJS	= $(call read_packet,kernel libs)
+
+# create kernel target
+kernel = $(call totarget,kernel)
+
+$(kernel): tools/kernel.ld
+
+$(kernel): $(KOBJS)
+	@echo + ld $@
+	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
+	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
+	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
+
+$(call create_target,kernel)
+
+# -------------------------------------------------------------------
+# create ucore.img
+UCOREIMG	:= $(call totarget,ucore.img)
+
+
+$(UCOREIMG): $(kernel)
+	$(OBJCOPY) $(kernel) --strip-all -O binary $@
+
+$(call create_target,ucore.img)
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+$(call finish_all)
+
+IGNORE_ALLDEPS	= clean \
+				  dist-clean \
+				  grade \
+				  touch \
+				  print-.+ \
+				  handin
+
+ifeq ($(call match,$(MAKECMDGOALS),$(IGNORE_ALLDEPS)),0)
+-include $(ALLDEPS)
+endif
+
+# files for grade script
+
+TARGETS: $(TARGETS)
+
+.DEFAULT_GOAL := TARGETS
+# 说明：原 Makefile 用 -device loader,file=$(UCOREIMG),addr=0x80200000 启动。
+# 该写法在 QEMU >= 8 下无效：QEMU 自带的 OpenSBI 已是 fw_dynamic 变体
+# （qemu-system-data 只提供 opensbi-riscv64-generic-fw_dynamic.bin），
+# 跳转地址不再硬编码，必须由 QEMU 通过 -kernel 告知。否则 OpenSBI 的
+# Domain0 Next Address 为 0x0，内核永远不会被执行。故 qemu/debug/test
+# 三个目标统一改为 -kernel $(UCOREIMG)。
+.PHONY: qemu spike test
+qemu: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
+	$(V)$(QEMU) \
+		-machine virt \
+		-nographic \
+		-bios default \
+		-kernel $(UCOREIMG)
+
+debug: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
+	$(V)$(QEMU) \
+		-machine virt \
+		-nographic \
+		-bios default \
+		-kernel $(UCOREIMG)\
+		-s -S
+
+gdb:
+	$(GDB) \
+    -ex 'file bin/kernel' \
+    -ex 'set arch riscv:rv64' \
+    -ex 'target remote localhost:1234'
+
+test: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
+	$(V)$(QEMU) \
+		-machine virt \
+		-nographic \
+		-bios default \
+		-kernel $(UCOREIMG)
+spike: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
+	$(V)$(SPIKE) $(UCOREIMG)
+
+.PHONY: grade touch
+
+GRADE_GDB_IN	:= .gdb.in
+GRADE_QEMU_OUT	:= .qemu.out
+HANDIN			:= proj$(PROJ)-handin.tar.gz
+
+TOUCH_FILES		:=
+
+MAKEOPTS		:= --quiet --no-print-directory
+
+GRADE_TMP	:= /tmp/lab2_grade
+
+grade:
+	$(V)$(MAKE) $(MAKEOPTS) clean
+	$(V)$(RM) -rf $(GRADE_TMP)
+	$(V)$(MKDIR) $(GRADE_TMP)
+	$(V)tar -C . --exclude=.git --exclude=.vscode --exclude=vcs -cf - . | tar -C $(GRADE_TMP) -xf -
+	$(V)python3 tools/inject.py $(GRADE_TMP)
+	$(V)cd $(GRADE_TMP) && $(SH) tools/grade.sh
+	$(V)$(RM) -rf $(GRADE_TMP)
+
+touch:
+	$(V)$(foreach f,$(TOUCH_FILES),$(TOUCH) $(f))
+
+print-%:
+	@echo $($(shell echo $(patsubst print-%,%,$@) | $(TR) [a-z] [A-Z]))
+
+.PHONY: clean dist-clean handin packall tags
+clean:
+	$(V)$(RM) $(GRADE_GDB_IN) $(GRADE_QEMU_OUT) cscope* tags
+	-$(RM) -r $(OBJDIR) $(BINDIR)
+
+dist-clean: clean
+	-$(RM) $(HANDIN)
+
+handin: packall
+	@echo Please visit http://learn.tsinghua.edu.cn and upload $(HANDIN). Thanks!
+
+packall: clean
+	@$(RM) -f $(HANDIN)
+	@tar -czf $(HANDIN) `find . -type f -o -type d | grep -v '^\.*$$' | grep -vF '$(HANDIN)'`
+
+tags:
+	@echo TAGS ALL
+	$(V)rm -f cscope.files cscope.in.out cscope.out cscope.po.out tags
+	$(V)find . -type f -name "*.[chS]" >cscope.files
+	$(V)cscope -bq 
+	$(V)ctags -L cscope.files

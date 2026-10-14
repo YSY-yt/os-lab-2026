@@ -1,0 +1,17 @@
+# 编译产物（ucore 工程内生成）
+bin/
+obj/
+*.o
+*.d
+*.img
+*.asm
+*.sym
+*.map
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
