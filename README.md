@@ -2,13 +2,14 @@
 
 本仓库为操作系统课程小组实验的交付仓库，实验平台为 **riscv64-ucore**（最小可执行内核 → 物理内存 → 中断 → 虚拟内存 → 线程 → 进程 → 调度 → 同步互斥 → 文件系统 → 页面置换）。
 
-实验指导书：<http://8.135.34.58/lab2026/_book/>
+实验指导书：<http://oslab.mobisys.top/lab2026/_book/>（旧地址 <http://8.135.34.58/lab2026/_book/> 内容相同）
 
-各实验的小组内部分工与交付要求见 [`docs/`](./docs/) 目录：
+仓库内的工作文档（在 `main` 分支）：
 
-- **lab1 任务分工与交付要求**：[`docs/lab1-tasks.md`](./docs/lab1-tasks.md)
-- **在自备电脑上搭建实验环境**：[`docs/env-setup.md`](./docs/env-setup.md)
-- **lab1 答辩复习材料**：[`docs/lab1-review.md`](./docs/lab1-review.md)
+- **lab1 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-tasks.md>
+- **lab2 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-tasks.md>
+- **在自备电脑上搭建实验环境**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/env-setup.md>
+- **lab1 答辩复习材料**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-review.md>
 
 ---
 
@@ -42,8 +43,8 @@ labx/
 
 | 分支 | 实验主题 | 状态 |
 |------|----------|------|
-| `lab1` | 比麻雀更小的麻雀（最小可执行内核） | 进行中 |
-| `lab2` | 物理内存和页表 | 未开始 |
+| `lab1` | 比麻雀更小的麻雀（最小可执行内核） | ✅ 已完成 |
+| `lab2` | 物理内存和页表 | 进行中 |
 | `lab3` | 断，都可以断（中断与异常） | 未开始 |
 | `lab4` | 进程管理 | 未开始 |
 | `lab5` | 用户程序 | 未开始 |
