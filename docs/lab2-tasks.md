@@ -88,8 +88,8 @@ make clean → 把整棵树复制到 /tmp/lab2_grade
 
 **（1）代码树在两者都完成前根本编译不过**
 
--  里的两个测试函数引用了 `free_list` / `nr_free`，这两个宏要自己写；不写就编译失败。
--  里 `page_init()` 未定义，但被 `pmm_init()` 调用；不写就链接失败。
+- `best_fit_pmm.c` 里的两个测试函数引用了 `free_list` / `nr_free`，这两个宏要自己写；不写就编译失败。
+- `pmm.c` 里 `page_init()` 未定义，但被 `pmm_init()` 调用；不写就链接失败。
 
 所以**任何一个人单独改完，`make` 都通不过**，也就没法自测。
 
