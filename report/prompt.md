@@ -43,21 +43,52 @@
 
 ## 二、部分二：页面分配算法
 
-### 提示词 1：实现 Best-Fit 物理内存管理模块（`kern/mm/best_fit_pmm.c`）
+### 提示词 1：空壳构建（`kern/mm/best_fit_pmm.c`）
 
 ````markdown
 [PROMPT]
+改kern/mm/best_fit_pmm.c,参照default_pmm.c补齐Best-Fit模块骨架让工程能编译。文件现在只有basic_check和best_fit_check两个测试函数,本阶段先按First-Fit实现。保留现有代码,只在//lab2标记处往下补。
 
 [RELY]
+free_area_t、Page结构体及页标志宏见kern/mm/memlayout.h,list_*见libs/list.h,set_page_ref和pmm_manager接口见kern/mm/pmm.h,best_fit_pmm.h已声明best_fit_pmm_manager。
 
 [GUARANTEE]
+实现best_fit_init/init_memmap/alloc_pages/free_pages/nr_free_pages,注册best_fit_pmm_manager(.check=best_fit_check),可加free_area和free_list/nr_free宏。行为同default_pmm.c对应函数。
 
 [SPECIFICATION]
 ````
 
-**生成的代码出了什么问题、怎么解决的：**
+### 提示词 2：规划分配算法修改
 
-[待填写]
+````markdown
+[PROMPT]
+分析default_pmm.c(First-Fit)与Best-Fit的差异,给出best_fit_alloc_pages的修改规划,本次不改代码只输出规划。
+
+[RELY]
+best_fit_pmm.c的best_fit_alloc_pages现在是First-Fit:遇到第一个property>=n就返回。两算法共用同一数据结构(地址升序链表+块首页property记大小),区别只在选哪个块。
+
+[GUARANTEE]
+输出:唯一要改的函数、要改的代码段(查找循环)、改后选择逻辑、哪些函数不用改及原因。结论是只改best_fit_alloc_pages的查找循环,从取第一个够用块改为遍历整条链表取property最小的够用块,其余函数不改。
+
+[SPECIFICATION]
+````
+
+### 提示词 3：执行修改
+
+````markdown
+[PROMPT]
+根据刚才的分析改kern/mm/best_fit_pmm.c,把best_fit_alloc_pages从First-Fit改成Best-Fit。只改best_fit_alloc_pages,其他函数和两个测试函数不动。
+
+[RELY]
+当前best_fit_alloc_pages是First-Fit:循环里遇到第一个property>=n就break。Best-Fit要求遍历整条free_list,在property>=n的块里选property最小的。
+
+[GUARANTEE]
+只改best_fit_alloc_pages的查找循环,切分、nr_free更新、清PG_property等逻辑不变。
+
+[SPECIFICATION]
+遍历整条链表选property>=n且最小者,摘除、够大切剩余块插回、nr_free减n、清块头PG_property后返回;n>nr_free或无满足块返NULL。
+````
+
 
 ---
 
