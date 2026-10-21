@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 //lab2 function2-2 2410868
+
 static free_area_t free_area;
 
 #define free_list (free_area.free_list)
@@ -54,8 +55,9 @@ best_fit_alloc_pages(size_t n) {
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
         if (p->property >= n) {
-            page = p;
-            break;
+            if (page == NULL || p->property < page->property) {
+                page = p;
+            }
         }
     }
     if (page != NULL) {
