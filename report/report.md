@@ -224,15 +224,13 @@ static void init_pmm_manager(void);   // 需把 pmm_manager 切换为 best_fit_p
 
 **实现迭代过程：**
 
-<!-- 记录：从零写整个管理器时踩的坑（如 free_list 未声明、块切分后链表顺序错乱、
-     释放时相邻块合并条件写错导致断言失败等），以及如何通过修改提示词解决 -->
+**第一轮：生成可编译的空壳。** `best_fit_pmm.c` 只有两个测试函数，且 `free_list`、`nr_free` 尚未声明，导致编译不过。于是先参照 `default_pmm.c` 补齐 `free_area` 与 `free_list` / `nr_free` 两个宏、五个管理函数（`best_fit_init`、`best_fit_init_memmap`、`best_fit_alloc_pages`、`best_fit_free_pages`、`best_fit_nr_free_pages`）以及末尾的 `best_fit_pmm_manager` 注册结构，此时分配逻辑仍是 First-Fit，但整棵树已能编译。
+
+**第二轮：把分配策略从 First-Fit 改成 Best-Fit。** Best-Fit 与 First-Fit 共用同一套数据结构（按地址升序排列的空闲链表 + 用 `property` 记录块大小），因此初始化、释放合并、计数等逻辑都无需改动，两者的唯一区别在于"分配时选哪个块"。所以只改 `best_fit_alloc_pages` 的查找循环：不再"遇到第一个 `property >= n` 的块就 break"，而是遍历整条空闲链表，每当遇到一个 `property >= n` 的块就与当前记录的候选块比较，保留 `property` 更小的那个；遍历结束后，对选中的最小块执行切分、`nr_free` 减去 `n`、清除块头的 `PG_property` 标记并返回该块首地址。
 
 **问题回答：你的 Best-Fit 算法是否有进一步的改进空间？**
 
-<!-- 提示方向：Best-Fit 仍为 O(n) 线性扫描；可维护按块大小排序的链表/树（如红黑树、伙伴索引）；
-     可设置最小块阈值避免产生过小碎片；可与分离适配（segregated fit）结合 -->
-
-[待填写]
+Best-Fit 仍是 O(n) 线性扫描——每次分配都要遍历整条空闲链表才能确定「最小够用」的块，空闲块越多查找越慢；同时它倾向于切出更小的剩余块，容易在内存中积累大量极小碎片。改进方向：一是用按块大小排序的结构（如平衡树/红黑树，或按大小分级的多级链表/分离适配）把查找从 O(n) 降到 O(log n)；二是设置最小切分阈值，剩余块小于阈值时不再切分，以减少过小碎片的产生。
 
 ---
 
