@@ -27,17 +27,92 @@
 
 ````markdown
 [PROMPT]
+**任务**：实现 `kern/mm/pmm.c` 中标有 `//lab2 function1 YOUR CODE` 位置的 `static void page_init(void)`，完成物理内存探测与页描述符初始化，并把注释里的 `YOUR CODE` 替换为我的学号 2413628（`//lab2` 注释必须保留）。
+
+**操作要求**：只修改 `kern/mm/pmm.c` 这一个文件；不得改动其它任何文件，也不得改动 `pmm_init()` 等已有函数。实现后必须在 `-Werror` 下编译通过，并满足下方 8 条验收标准。
+
+**输出要求**：直接给出可编译的代码实现。
 
 [RELY]
+// ---- 地址常量（kern/mm/memlayout.h）----
+#define PHYSICAL_MEMORY_OFFSET  0xFFFFFFFF40000000   // 虚地址 - 物理地址
+#define KERNEL_BEGIN_PADDR      0x80200000
+#define PHYSICAL_MEMORY_END     0x88000000
+
+// ---- 页与页号（kern/mm/mmu.h / libs/defs.h）----
+#define PGSIZE   4096
+#define PGSHIFT  12
+#define PPN(la)  (((uintptr_t)(la)) >> PGSHIFT)
+#define ROUNDUP(a, n) / ROUNDDOWN(a, n)
+
+// ---- 全局符号（kern/mm/pmm.c / pmm.h）----
+extern struct Page *pages;       // 页描述符数组（待初始化）
+extern size_t npage;             // 可管理物理页总数（待初始化）
+extern const size_t nbase;       // = DRAM_BASE / PGSIZE = 0x80000
+extern uint64_t va_pa_offset;    // 虚实映射偏移（待初始化）
+uint64_t get_memory_base(void);  // kern/driver/dtb.h，设备树解析出的内存起始地址
+uint64_t get_memory_size(void);  // 设备树解析出的内存大小
+
+// ---- 页描述符（kern/mm/memlayout.h）----
+struct Page { int ref; uint64_t flags; unsigned int property; list_entry_t page_link; };
+#define SetPageReserved(page)  ((page)->flags |= (1UL << 0))   // PG_reserved
+
+// ---- 地址转换（kern/mm/pmm.h）----
+#define PADDR(kva) ...                            // 虚拟地址 → 物理地址（依赖 va_pa_offset）
+static inline struct Page *pa2page(uintptr_t pa); // 物理地址 → Page 描述符
+static inline uintptr_t page2pa(struct Page *p);  // Page → 物理地址
+
+// ---- 交给管理器的入口（kern/mm/pmm.c）----
+static void init_memmap(struct Page *base, size_t n);  // 内部调用 pmm_manager->init_memmap
+
+// ---- 调试 ----
+panic(fmt, ...); assert(x);
+
+// ---- 链接符号 ----
+extern char end[];   // 内核镜像结束位置（虚拟地址）
 
 [GUARANTEE]
+必须交付：`kern/mm/pmm.c` 中 `static void page_init(void)` 的完整实现，并把注释里的 `YOUR CODE` 替换为 `2413628`。
 
 [SPECIFICATION]
+## page_init
+**Pre-Condition**：`init_pmm_manager()` 已调用（`pmm_manager` 已选定）；`dtb_init()` 已调用（`get_memory_base()/get_memory_size()` 已就绪）。
+**Post-Condition**：`va_pa_offset`、`npage`、`pages` 已正确设置；内核镜像与页描述符数组所占页均处于 `PageReserved` 状态；其余空闲页已通过 `init_memmap()` 交给管理器。
+
+**Requirements（按顺序）**：
+1. 设 `va_pa_offset = PHYSICAL_MEMORY_OFFSET`；
+2. 取 `mem_base = get_memory_base()`、`mem_size = get_memory_size()`，任一为 0 则 `panic` 终止；
+3. 设 `npage = PPN(mem_base + mem_size)`，并保证 `npage > nbase`；
+4. 设 `pages = (struct Page *)ROUNDUP((uintptr_t)end, PGSIZE)`（放在内核 `end` 之后、按页对齐）；
+5. 把下标 `[0, npage - nbase)` 范围内的所有 Page 描述符先全部 `SetPageReserved`；
+6. 计算首个可分配字节 `freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage)`；
+7. 对区间 `[ROUNDUP(freemem, PGSIZE), ROUNDDOWN(mem_end, PGSIZE))`（若非空）调用 `init_memmap(pa2page(begin), (end_pa - begin) / PGSIZE)`；**没有任何完整空闲页时不得调用**。
+
+## 验收（与 tools/test_lab2.c 的 8 条一致）
+1. `va_pa_offset == PHYSICAL_MEMORY_OFFSET`
+2. `get_memory_base()` / `get_memory_size()` 均非 0
+3. `npage == PPN(mem_base + mem_size)` 且 `npage > nbase`
+4. `pages` 非空、按 `PGSIZE` 对齐、位于 `ROUNDUP(end, PGSIZE)` 之后
+5. `nr_free_pages()` ∈ `(0, npage - nbase]`
+6. `PageReserved(pa2page(PADDR(end)))` 为真（内核镜像尾页保留）
+7. `PageReserved(pa2page(PADDR(pages)))` 为真（页描述符数组保留）
+8. `pa2page(page2pa(q)) == q`（往返一致）
+
+## Requirements（全局）
+- `-Werror` 下无警告；内核无 libc，不得调用 `malloc`/`printf` 等标准库；
+- 注意区分**虚拟地址 / 物理地址 / 页号 / Page 指针**四者；调用 `PADDR`/`pa2page` 之前必须已设好 `va_pa_offset` 与 `pages`。
 ````
 
 **生成的代码出了什么问题、怎么解决的：**
 
-[待填写]
+**第一轮：生成初版实现。** 让 AI 参考经典 ucore `page_init()` 生成代码。初版照搬 x86 版思路，用 `e820map` 结构探测内存，与本实验的 RISC-V 移植不一致——本实验没有 `e820map`，物理内存范围来自设备树（`dtb_init()` 解析后由 `get_memory_base()/get_memory_size()` 提供），且虚实映射偏移是 `PHYSICAL_MEMORY_OFFSET` 而非 x86 的 `KERNBASE` 关系。
+
+**第二轮：改成设备树方案并逐条对照 8 条验收。** 修正后让 AI 重新按 RISC-V 平台的常量实现：先设 `va_pa_offset`，再从设备树取 `mem_base/mem_size` 算 `npage`，把 `pages` 放到内核 `end` 之后按页对齐。此过程中重点核对了两处容易出错的地方：
+
+1. **地址类型混淆**：`end` 是内核**虚拟地址**，直接当物理地址用会错；必须 `PADDR(end)` 或 `ROUNDUP((uintptr_t)end, PGSIZE)` 得到虚拟地址后再 `PADDR` 转物理。`freemem` 也是同理——它是"pages 数组末尾"的虚拟地址，必须 `PADDR` 之后才能与物理的 `mem_end` 做比较。
+2. **遗漏保留区**：不能只保留内核镜像占用的页，**页描述符数组自身占用的页也必须 `PageReserved`**，否则数组所在页会被当成空闲页交给管理器，破坏描述符本身。实现里用"先全部 `SetPageReserved`，再从 `freemem` 之后释放"的方式一次性覆盖了内核镜像与描述符数组两块保留区。
+
+**第三轮：编译 + 验收收敛。** 修正后在 `-Werror` 下编译通过、零警告；逐条核对 `tools/test_lab2.c` 的 8 条断言（`va_pa_offset`、`npage`、`pages` 对齐、空闲页数区间、内核尾页与数组页均 reserved、`page2pa`/`pa2page` 往返），并确认 `make grade` 中 `[Test 1] Page Init: PASS`。
 
 ---
 

@@ -61,7 +61,54 @@ size_t nr_free_pages(void) {
     return pmm_manager->nr_free_pages();
 }
 
-//lab2 function1 YOUR CODE
+//lab2 function1 2413628
+// page_init - detect the physical memory, reserve the kernel image and the
+// Page descriptor array, then hand the remaining physical memory to the pmm
+// manager as free pages.
+static void page_init(void) {
+    extern char end[];
+    uint64_t mem_base, mem_size, mem_end;
+    uintptr_t freemem, begin, end_pa;
+
+    // (1) set the virtual/physical address mapping offset
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
+
+    // (2) obtain the physical memory range reported by the device tree
+    mem_base = get_memory_base();
+    mem_size = get_memory_size();
+    if (mem_base == 0 || mem_size == 0) {
+        panic("page_init: invalid physical memory info from device tree\n");
+    }
+    mem_end = mem_base + mem_size;
+
+    // (3) compute the total number of managed physical pages
+    npage = PPN(mem_end);
+    assert(npage > nbase);
+
+    // (4) place the Page descriptor array right after the kernel image,
+    //     aligned to a page boundary
+    pages = (struct Page *)ROUNDUP((uintptr_t)end, PGSIZE);
+
+    // (5) reserve every managed page first; free pages are released below
+    for (size_t i = 0; i < npage - nbase; i++) {
+        SetPageReserved(pages + i);
+    }
+
+    // (6) the first byte that can be handed to the allocator: right after
+    //     the Page descriptor array
+    freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
+
+    // (7) release the remaining physical memory as free pages
+    begin = freemem;
+    end_pa = mem_end;
+    if (begin < end_pa) {
+        begin = ROUNDUP(begin, PGSIZE);
+        end_pa = ROUNDDOWN(end_pa, PGSIZE);
+        if (begin < end_pa) {
+            init_memmap(pa2page(begin), (end_pa - begin) / PGSIZE);
+        }
+    }
+}
 
 /* pmm_init - initialize the physical memory management */
 void pmm_init(void) {
