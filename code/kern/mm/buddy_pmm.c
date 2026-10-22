@@ -171,10 +171,12 @@ buddy_free_pages(struct Page *base, size_t n) {
             break;                       /* 伙伴不空闲或不同阶 */
         }
 
-        /* 从该阶链表摘除伙伴 */
+        /* 从该阶链表摘除伙伴；全局 nr_free 也要减去它，
+         * 否则最后按合并后的整块大小累加时会重复计算伙伴的页数。 */
         list_del(&(buddy->page_link));
         ClearPageProperty(buddy);
         free_area[k].nr_free -= ORDER_PAGES(k);
+        nr_free -= ORDER_PAGES(k);
 
         /* 合并后的头页取地址较小者 */
         if (buddy < base) {

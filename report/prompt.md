@@ -405,9 +405,22 @@ without a cast [-Wint-conversion]
 
 **第二轮（提示词二 → 生成测试）**
 
-测试代码一次通过编译。但要注意：`buddy_check()` 的运行时验证**依赖
-`page_init()` 把空闲区交给 `init_memmap()`**，因此在部分一完成之前只能做
-静态编译验证，无法真正跑起来。这一点已在分工文档 §0.5 中说明。
+15 个用例写好后在 QEMU 中真正跑起来，**Case 3 断言失败**：
+
+```
+kernel panic at kern/mm/buddy_pmm.c:266:
+    assertion failed: nr_free_pages() == before
+```
+
+**原因**：释放时与伙伴合并，只在**该阶链表**的计数里减去了伙伴的页数，
+**没有同步减全局 `nr_free`**；而合并结束后又按**合并后的整块大小**累加到
+`nr_free`，于是伙伴的页数被重复计算了一次。
+
+**解决**：在摘除伙伴时同步执行 `nr_free -= ORDER_PAGES(k)`。修复后
+**15 个用例全部通过**（`ALL 15 CASES PASSED`）。
+
+> 这个 bug 很隐蔽：它不崩溃、不报错，只会让 `nr_free` 缓慢偏大，肉眼几乎
+> 看不出来——正是靠"分配后释放，`nr_free` 必须回到原值"这条断言才抓住。
 
 ---
 
@@ -415,6 +428,7 @@ without a cast [-Wint-conversion]
 
 | 轮次 | 提示词 | 出现的问题 | 如何修改提示词解决 |
 |------|--------|-----------|-------------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
+| 1 | 部分一 · `page_init`（第一轮） | AI 按 x86 的 `e820map` 思路实现内存探测，与本实验 RISC-V 的设备树路径不符 | 在 `[RELY]` 中补充真实接口 `get_memory_base()` / `get_memory_size()`，并明确映射偏移是 `PHYSICAL_MEMORY_OFFSET` |
+| 2 | 部分一 · `page_init`（第二轮） | 地址类型混淆：`end` 是**虚拟地址**，不能直接与物理地址比较 | 在 `[SPECIFICATION]` 中要求区分虚拟地址/物理地址/物理页号，规定先用 `PADDR()` 转换再比较 |
+| 3 | 部分三 · 提示词一（生成 Buddy 模块） | 局部变量 `unsigned int pages` 遮蔽全局 `struct Page *pages`，指针加法退化为整数加法（`-Wint-conversion`） | 在 `[RELY]` 中明确列出 `pages` / `npage` / `nbase` 等全局符号；代码中改名为 `pgs` |
+| 4 | 部分三 · 提示词二（生成测试） | 合并伙伴时未同步递减全局 `nr_free`，导致伙伴页数被重复计算，Case 3 的 `nr_free_pages() == before` 断言失败 | 在 `[SPECIFICATION]` 中补上"摘除伙伴时同步递减全局计数"；测试中增加"页数守恒"不变量 |
