@@ -138,6 +138,14 @@ static void page_init(void);   // kern/mm/pmm.c
 
 **最终提示词：**
 
+完整文本见 [`report/prompt.md`](./prompt.md) 第一节「部分一：物理内存初始化」。这份提示词的设计要点：
+
+- **[PROMPT]** 明确目标文件与函数签名（`kern/mm/pmm.c` 的 `page_init()`），要求**必须修改真实文件**、且只改这一个文件；并把“`YOUR CODE` 替换为学号、保留 `//lab2` 注释”写进任务本身。
+- **[RELY]** 只给与 `page_init` 直接相关的事实：地址常量（`PHYSICAL_MEMORY_OFFSET` / `KERNEL_BEGIN_PADDR` / `PHYSICAL_MEMORY_END`）、页与页号宏（`PGSIZE` / `PGSHIFT` / `PPN` / `ROUNDUP`）、全局符号（`pages` / `npage` / `nbase` / `va_pa_offset`）、设备树接口（`get_memory_base()` / `get_memory_size()`）、`struct Page` 与 `SetPageReserved`、地址转换（`PADDR` / `pa2page` / `page2pa`）、链接符号 `end`。
+- **[GUARANTEE]** 只交付一个函数，避免 AI 顺手改动别的代码。
+- **[SPECIFICATION]** 按**执行顺序**列出 7 条 Requirements，并把 `tools/test_lab2.c` 的 **8 条验收标准原样列出**——让“要交付什么”和“怎么判定”成为同一份东西。
+- **全局约束**：`-Werror` 下无警告、内核无 libc，以及“注意区分**虚拟地址 / 物理地址 / 页号 / Page 指针**四者”这条最容易出错的地方。
+
 **实现迭代过程：**
 
 **第一轮：生成初版。** 让 AI 参考经典 ucore 的 `page_init()` 生成代码。初版照搬 x86 版思路，用 `e820map` 结构探测物理内存，但本实验是 RISC-V 移植、没有 `e820map`：内存范围由 `dtb_init()` 解析设备树后经 `get_memory_base()/get_memory_size()` 提供，虚实映射偏移是 `PHYSICAL_MEMORY_OFFSET`（`0xFFFFFFFF40000000`）。因此第一版无法直接使用。
