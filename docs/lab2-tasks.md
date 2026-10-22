@@ -3,6 +3,8 @@
 > 本文件是本小组的内部工作文档，用于明确 lab2 三个部分的负责人、具体工作内容与交付要求。
 > 仓库：<https://github.com/YSY-yt/os-lab-2026>　分支：`lab2`
 > 实验指导书：<http://oslab.mobisys.top/lab2026/_book/lab2/lab2.html>
+>
+> **✅ 本实验已完成**： 得分 **20/20**，Buddy System 自研测试 15 个用例全部通过。
 
 ---
 
