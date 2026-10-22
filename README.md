@@ -9,6 +9,7 @@
 - **lab1 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-tasks.md>
 - **lab2 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-tasks.md>
 - **lab2 部分三（Buddy System）设计思路**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-buddy-design.md>
+- **lab2 收尾清单**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-closing-checklist.md>
 - **在自备电脑上搭建实验环境**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/env-setup.md>
 - **lab1 答辩复习材料**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-review.md>
 
