@@ -163,7 +163,12 @@ best_fit_pmm.c的best_fit_alloc_pages现在是First-Fit:遇到第一个property>
 [SPECIFICATION]
 遍历整条链表选property>=n且最小者,摘除、够大切剩余块插回、nr_free减n、清块头PG_property后返回;n>nr_free或无满足块返NULL。
 ````
+**生成的代码出了什么问题、怎么解决的：**
 
+初始`best_fit_pmm.c` 只有两个测试函数，
+`free_list` / `nr_free` 未声明导致编译失败。参照 `default_pmm.c` 补齐
+`free_area`、两个宏、五个管理函数与 `best_fit_pmm_manager` 注册结构，
+此时分配逻辑仍是 First-Fit，整棵树已能编译。
 
 ---
 
