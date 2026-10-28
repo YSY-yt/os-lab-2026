@@ -10,6 +10,7 @@
 - **lab2 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-tasks.md>
 - **lab2 部分三（Buddy System）设计思路**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-buddy-design.md>
 - **lab2 收尾清单**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-closing-checklist.md>
+- **lab3 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab3-tasks.md>
 - **在自备电脑上搭建实验环境**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/env-setup.md>
 - **lab1 答辩复习材料**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-review.md>
 
@@ -47,7 +48,7 @@ labx/
 |------|----------|------|
 | `lab1` | 比麻雀更小的麻雀（最小可执行内核） | ✅ 已完成 |
 | `lab2` | 物理内存和页表 | ✅ 已完成 |
-| `lab3` | 断，都可以断（中断与异常） | 未开始 |
+| `lab3` | 断，都可以断（中断与异常） | 进行中 |
 | `lab4` | 进程管理 | 未开始 |
 | `lab5` | 用户程序 | 未开始 |
 | `lab6` | 进程调度 | 未开始 |
