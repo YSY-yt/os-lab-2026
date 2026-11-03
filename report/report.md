@@ -41,7 +41,7 @@
 |------|------------|---------|------|
 | 2412796-杨斯源 | [待本人确认] | [待本人确认] | |
 | 2413628-黄乐仁 | [待本人确认] | [待本人确认] | |
-| 2410868-孙锘梵 | [待本人确认] | [待本人确认] | |
+| 2410868-孙锘梵 |DeepSeek Harness|deepseek-flash| |
 
 **运行环境：**
 
@@ -105,6 +105,20 @@
 **最终提示词：** 见 [`report/prompt.md`](./prompt.md) 对应小节（即 lab2 使用过的提示词）。
 
 **补回后的验证：** 代码应能编译通过，且 `make grade` 中前两项（`page init` / `best fit`）仍为 OK。
+
+**Best-Fit 补回说明（2410868-孙锘梵）：**
+
+`kern/mm/best_fit_pmm.c` 中的 `basic_check()` 与 `best_fit_check()` 两个测试函数已由实验框架提供，补回时只需补齐缺失的三部分：
+
+| 补回内容 | 说明 |
+|---|---|
+| 空闲区结构 | `static free_area_t free_area;`，并用两个宏把 `free_list` / `nr_free` 映射到它的成员；已提供的测试函数正是通过这两个名字访问空闲链表，缺了会直接编译失败 |
+| 五个管理函数 | `best_fit_init`、`best_fit_init_memmap`、`best_fit_alloc_pages`、`best_fit_free_pages`、`best_fit_nr_free_pages` |
+| 管理器注册 | `const struct pmm_manager best_fit_pmm_manager`，把五个函数指针与 `.check = best_fit_check` 绑定 |
+
+与 First-Fit 的实质差别只有 `best_fit_alloc_pages()` 的选块策略：First-Fit 遇到第一个 `property >= n` 的块就返回，Best-Fit 则遍历整条空闲链表，在所有满足条件的块中挑 `property` 最小的那一块，以减少本次分配对空闲区造成的碎片。
+
+最终提示词见 [`report/prompt.md`](./prompt.md) 第二节「提示词 0」。
 
 ---
 
@@ -180,12 +194,131 @@ void exception_handler(struct trapframe *tf);
 
 **最终提示词：**
 
-<!-- 见 report/prompt.md；此处粘贴最终定稿 -->
+两个 handler 各使用一份独立提示词，全文见 [`report/prompt.md`](./prompt.md) 第二节的「提示词 1」「提示词 2」。定稿原文如下。
+
+````markdown
+[PROMPT]
+**任务**：修改 `kern/trap/trap.c`，在 `//lab3 function2 YOUR CODE` 处实现 `interrupt_handler()`，使内核能区分并处理 S 模式的时钟、软件、外部中断，并对无法识别的中断做兜底输出。
+
+**操作要求**：必须在项目中修改实际文件；新增代码写入标记处且位于 `trap_dispatch()` 之前；`idt_init()`、`print_trapframe()`、`print_ticks()` 等既有函数保持不动；该函数**不得声明为 `static`**。
+
+**输出要求**：使用下方信息，以工程真实定义为准。
+
+[RELY]
+```c
+// libs/riscv.h
+IRQ_S_SOFT   1
+IRQ_S_TIMER  5
+IRQ_S_EXT    9
+
+// driver/clock.h、trap.c
+extern volatile size_t ticks;      // 累计时钟中断次数
+void clock_set_next_event(void);   // 安排下一次时钟事件（一次性）
+#define TICK_NUM 100
+static void print_ticks(void);      // 已提供，输出统计信息
+
+void print_trapframe(struct trapframe *tf);
+void cprintf(const char *fmt, ...);
+```
+
+```
+// scause 最高位为 1 表示中断，原因编号位于低位；
+// 入参 tf->cause 按 scause 原值约定，可能带也可能不带最高位。
+```
+
+[GUARANTEE]
+```c
+void interrupt_handler(struct trapframe *tf);   // 不得为 static
+```
+
+[SPECIFICATION]
+## interrupt_handler
+**Pre-Condition**：`tf` 有效，`tf->cause` 为 `scause` 原值。
+**Post-Condition**：对应中断处理完毕，函数正常返回；`tf->epc` 不被修改（中断返回后应继续执行被打断的指令）；处理过程中不关闭中断使能、不调用 `panic()`。
+**Case 1**（`IRQ_S_TIMER`）：先重新安排下一次时钟事件，再累加 `ticks`；计数每满 `TICK_NUM` 输出一次统计信息。
+**Case 2**（`IRQ_S_SOFT`）：输出一行可辨识的 S 模式软件中断提示。
+**Case 3**（`IRQ_S_EXT`）：输出一行可辨识的 S 模式外部中断提示。
+**Case 4**（其他中断号）：先输出含该中断号十进制值的提示，再打印完整 Trap frame 作为兜底。
+
+**Requirements**：
+- 判断类型前必须先剥离 `scause` 的最高位；输出的中断号同样取剥离后的值。
+- 时钟分支中「重新安排下一次事件」必须先于其他处理，任何路径都不得漏设，否则时钟中断只到来一次。
+````
+
+````markdown
+[PROMPT]
+**任务**：修改 `kern/trap/trap.c`，在 `//lab3 function2 YOUR CODE` 处实现 `exception_handler()`，按异常原因处理非法指令与断点，并保证处理完成后返回原执行流而不再触发同一条指令。
+
+**操作要求**：必须在项目中修改实际文件；新增代码写入标记处且位于 `trap_dispatch()` 之前；`interrupt_handler()`、`trap_dispatch()`、`trap()` 等既有函数保持不动；该函数**不得声明为 `static`**。
+
+**输出要求**：使用下方信息，以工程真实定义为准。
+
+[RELY]
+```c
+// trap.h
+struct trapframe { struct pushregs gpr; uintptr_t status, epc, badvaddr, cause; };
+
+// libs/riscv.h
+CAUSE_ILLEGAL_INSTRUCTION  0x2
+CAUSE_BREAKPOINT           0x3
+
+void print_trapframe(struct trapframe *tf);
+void cprintf(const char *fmt, ...);
+```
+
+```
+// 异常 cause 为非负小整数，不需要剥离标志位；sret 会把 sepc 装回 pc。
+```
+
+[GUARANTEE]
+```c
+void exception_handler(struct trapframe *tf);   // 不得为 static
+```
+
+[SPECIFICATION]
+## exception_handler
+**Pre-Condition**：`tf` 有效，`tf->cause` 为异常原因。
+**Post-Condition**：非法指令与断点处理完成后，`tf->epc` 已指向触发异常的指令之后；其他异常 `tf->epc` 保持不变；函数正常返回，不调用 `panic()`。
+**Case 1**（`CAUSE_ILLEGAL_INSTRUCTION`）：输出含 `tf->epc` 数值的提示，再按该地址处指令的编码决定前进长度并更新 `tf->epc`：最低两位为 `0b11` 是 32 位指令，否则是 16 位压缩指令。
+**Case 2**（`CAUSE_BREAKPOINT`）：输出含 `tf->epc` 数值的提示；`ebreak` 为 4 字节指令，`tf->epc` 前进 4。
+**Case 3**（其他异常）：不改变 `tf->epc`，打印完整 Trap frame 作为兜底。
+
+**Requirements**：
+- 必须更新 `tf->epc`，否则返回后再次执行同一条异常指令，形成异常循环。
+- 指令长度只能由编码判定，不能写死偏移量。
+- 只有非法指令分支读取 `tf->epc` 处的内存；兜底分支的 Trap frame 可能来自人工构造，不得无条件解引用。
+- 打印 64 位地址时使用 64 位格式化符，避免截断。
+````
 
 **实现迭代过程：**
 
-<!-- 记录 AI 生成 handler 时出现的 bug（如 epc 偏移量固定写死导致异常循环、
-     时钟中断忘记重新 arm、ticks 类型/原子性问题等）以及解决过程 -->
+**一、提示词的三轮调整**
+
+*第一轮：从一句话到四段式。* 最初的描述只有「实现 `interrupt_handler` 和 `exception_handler`」。问题在于这两个函数唯一的入参是 `tf`，而几乎所有行为都取决于 `scause` 的编码方式与 `trapframe` 的字段语义；这些不写进 `[RELY]`，生成结果里的宏名和字段名就只能靠猜，极容易出现 `sbadaddr` / `badvaddr`、`stvec` / `sepc` 之类对不上的写法。于是把 `struct trapframe` 的布局、`IRQ_S_*` 与 `CAUSE_*` 的取值、`clock_set_next_event()` 与 `volatile size_t ticks` 的声明补入 `[RELY]`。
+
+*第二轮：先合并、再拆分。* 一开始把两个 handler 合成一份「中断与异常处理模块」的提示词，理由是二者共享同一套 `scause` 语义。但合并后 `[RELY]` 里同时堆着中断常量与异常常量，任何一侧都用不到另一半，违背了 `[RELY]` 要「最小」的要求；而且两个 handler 的验收彼此独立。最终拆成两份提示词，各自只带自己需要的宏与函数，上下文都压到 10 行以内。
+
+*第三轮：把体系结构约束从「说明」挪进「规格」。* 三条约束最初只打算写成说明性文字：`scause` 最高位的含义、一次性定时器必须每次重设、`epc` 必须前进。但说明性文字容易被当成建议而忽略，只有写进 `Post-Condition` 与 `Requirements` 才会真正约束生成结果。因此 `interrupt_handler` 把「`tf->epc` 不被修改」写成后置条件，把「续期必须先于其他处理」写成 `Requirements`；`exception_handler` 把「`epc` 已指向触发异常的指令之后」写成后置条件。
+
+**二、代码的分步实现**
+
+两个 handler 没有一次性生成，而是按「先定输入、再填分支」的顺序分四步完成，每步都能单独检查：
+
+1. **先只做 `cause` 归一化**，把 `switch (cause)` 的骨架铺好、分支体留空。这一步的目的是先把「输入到底是什么」定死——`scause` 是原始值，最高位是中断标志，不剥离就无法比较。
+2. **填时钟分支**：`clock_set_next_event()` → `ticks++` → 每满 `TICK_NUM` 调用框架已提供的 `print_ticks()`。
+3. **填软件中断、外部中断、未知中断**三个分支。
+4. **单独实现 `exception_handler`**：非法指令按编码判长、断点固定前进 4 字节、其余走 `print_trapframe()` 兜底。
+
+**三、实现过程中处理的问题**
+
+1. **`%d` 与 64 位实参不匹配。** 未知中断要输出中断号的十进制值，而 `cause` 是 `uintptr_t`（64 位）。变参函数不做类型提升，直接把 64 位值交给 `%d` 属于未定义行为。处理方式是在输出前显式转换为 `int`：`cprintf("Unknown interrupt: cause %d\n", (int)cause)`。
+2. **兜底分支不能解引用 `tf->epc`。** 非法指令分支需要读回触发异常的指令来判断长度，但如果把这段读取放在函数入口统一执行，遇到人工构造的 `trapframe`（`epc` 为 0）就会直接访存失败。处理方式是只在非法指令分支内读取，兜底分支只调用 `print_trapframe(tf)`，它仅访问 `tf` 自身的字段。
+3. **`-Werror` 下的声明顺序。** 框架开启了 `-Werror`，若把两个 handler 写在 `trap_dispatch()` 之后，会因为隐式声明直接编译失败。处理方式是全部写在 `trap_dispatch()` 之前。
+4. **`static` 会破坏外部调用。** 本文件之外的其他代码会直接调用这两个 handler，若误加 `static` 会导致链接失败。这一点已写进两份提示词的 `[GUARANTEE]` 注释中。
+5. **指导书要求的「关机」与框架不一致。** 指导书建议在统计输出累计达到 `SHUTDOWN_AFTER` 后调用关机接口，但框架中并没有定义这个阈值宏，只有 `libs/sbi.h` 提供的 `sbi_shutdown()`。而本实验的验收需要在内核运行较长时间后确认时钟计数仍在增长，过早关机会让观测窗口提前结束。综合两点，本实现只完成「续期 → 计数 → 输出」的闭环，未加入关机判断。
+
+
+
 
 ---
 
