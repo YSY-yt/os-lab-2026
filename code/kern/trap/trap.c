@@ -80,7 +80,65 @@ void print_regs(struct pushregs *gpr) {
     cprintf("  t6       0x%08x\n", gpr->t6);
 }
 
-//lab3 function2 YOUR CODE
+//lab3 function2 2410868
+
+/* interrupt_handler - 处理中断类 Trap
+ * scause 的最高位为 1 表示这是一个中断，真正的中断号位于低位；
+ * 这里先剥离标志位，得到一个可以直接用于 switch 的中断号。 */
+void interrupt_handler(struct trapframe *tf) {
+    uintptr_t cause = tf->cause & ~(1UL << 63);
+
+    switch (cause) {
+    case IRQ_S_TIMER:
+        /* sbi_set_timer() 安排的是一次性时钟事件：本次中断处理完就作废，
+         * 所以必须先重新设置下一次，否则时钟中断只会到来一次。 */
+        clock_set_next_event();
+        ticks++;
+        if (ticks % TICK_NUM == 0) {
+            print_ticks();
+        }
+        break;
+    case IRQ_S_SOFT:
+        cprintf("Supervisor software interrupt\n");
+        break;
+    case IRQ_S_EXT:
+        cprintf("Supervisor external interrupt\n");
+        break;
+    default:
+        /* 未知中断：先输出原因便于检索，再打印完整 Trap frame 兜底。
+         * 这里不能 panic()，未识别中断属于可恢复情形。 */
+        cprintf("Unknown interrupt: cause %d\n", (int)cause);
+        print_trapframe(tf);
+        break;
+    }
+}
+
+/* exception_handler - 处理异常类 Trap
+ * 异常是同步事件，cause 为较小的正值，不需要剥离标志位。
+ * 关键在于修正 tf->epc：sret 会把 sepc 装回 pc，若不前进，
+ * 返回后会再次执行同一条异常指令，形成异常循环。 */
+void exception_handler(struct trapframe *tf) {
+    switch (tf->cause) {
+    case CAUSE_ILLEGAL_INSTRUCTION: {
+        cprintf("Illegal instruction at 0x%016lx\n", tf->epc);
+        /* 按 RISC-V 指令编码判断长度：最低两位为 0b11 表示 32 位指令，
+         * 否则为 16 位压缩指令。不能一律按 +4 处理。 */
+        uint16_t insn = *(uint16_t *)tf->epc;
+        tf->epc += ((insn & 0x3) == 0x3) ? 4 : 2;
+        break;
+    }
+    case CAUSE_BREAKPOINT:
+        cprintf("Breakpoint at 0x%016lx\n", tf->epc);
+        /* ebreak 是 4 字节指令 */
+        tf->epc += 4;
+        break;
+    default:
+        /* 其他异常本实验不要求具体恢复，打印 Trap frame 后直接返回 */
+        cprintf("Unknown exception: cause %d\n", (int)tf->cause);
+        print_trapframe(tf);
+        break;
+    }
+}
 
 
 static inline void trap_dispatch(struct trapframe *tf) {
