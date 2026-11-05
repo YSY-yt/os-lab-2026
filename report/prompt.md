@@ -26,28 +26,174 @@
 ### 提示词 0：补回 lab2 的 `page_init()`
 
 > 沿用 lab2 使用过的 `page_init` 提示词（见 lab2 分支的 `report/prompt.md` 第一节），
-> 把生成结果填入 `kern/mm/pmm.c` 中标有 `//lab2 请补充你在lab2中的代码` 的位置。
+> 把生成结果填入 `kern/mm/pmm.c` 中标有 `//lab2 function1 YOUR CODE` 的位置，并把 `YOUR CODE` 替换为学号 `2413628`。
+> lab3 与 lab2 的 `pmm.c` 在物理内存管理上完全一致，因此这条提示词直接复用、无需修改规格。
 
 ````markdown
 [PROMPT]
+**任务**：实现 `kern/mm/pmm.c` 中标有 `//lab2 function1 YOUR CODE` 位置的 `static void page_init(void)`，完成物理内存探测与页描述符初始化，并把注释里的 `YOUR CODE` 替换为我的学号 `2413628`（`//lab2` 注释必须保留）。
+
+**操作要求**：只修改 `kern/mm/pmm.c` 这一个文件；不得改动 `pmm_init()` 等已有函数；实现后必须在 `-Werror` 下编译通过。
+
+**输出要求**：直接给出可编译的代码实现。
 
 [RELY]
+```c
+// ---- 地址常量（kern/mm/memlayout.h）----
+#define PHYSICAL_MEMORY_OFFSET  0xFFFFFFFF40000000   // 虚地址 - 物理地址
+#define PHYSICAL_MEMORY_END     0x88000000
+
+// ---- 页与页号（kern/mm/mmu.h / libs/defs.h）----
+#define PGSIZE   4096
+#define PGSHIFT  12
+#define PPN(la)  (((uintptr_t)(la)) >> PGSHIFT)
+#define ROUNDUP(a, n) / ROUNDDOWN(a, n)
+
+// ---- 全局符号（kern/mm/pmm.c / pmm.h）----
+extern struct Page *pages;       // 页描述符数组（待初始化）
+extern size_t npage;             // 可管理物理页总数（待初始化）
+extern const size_t nbase;       // = DRAM_BASE / PGSIZE = 0x80000
+extern uint64_t va_pa_offset;    // 虚实映射偏移（待初始化）
+uint64_t get_memory_base(void);  // kern/driver/dtb.h，设备树解析出的内存起始地址
+uint64_t get_memory_size(void);  // 设备树解析出的内存大小
+
+// ---- 页描述符（kern/mm/memlayout.h）----
+struct Page { int ref; uint64_t flags; unsigned int property; list_entry_t page_link; };
+#define SetPageReserved(page)  ((page)->flags |= (1UL << 0))   // PG_reserved
+
+// ---- 地址转换（kern/mm/pmm.h）----
+#define PADDR(kva) ...                            // 虚拟地址 → 物理地址（依赖 va_pa_offset）
+static inline struct Page *pa2page(uintptr_t pa); // 物理地址 → Page 描述符
+static inline uintptr_t page2pa(struct Page *p);  // Page → 物理地址
+
+// ---- 交给管理器的入口（kern/mm/pmm.c）----
+static void init_memmap(struct Page *base, size_t n);  // 内部调用 pmm_manager->init_memmap
+
+// ---- 链接符号 ----
+extern char end[];   // 内核镜像结束位置（虚拟地址）
+```
 
 [GUARANTEE]
+```c
+static void page_init(void);   // kern/mm/pmm.c，把 //lab2 function1 YOUR CODE 替换为 2413628
+```
 
 [SPECIFICATION]
+## page_init
+**Pre-Condition**：`init_pmm_manager()` 已调用（`pmm_manager` 已选定）；`dtb_init()` 已调用（`get_memory_base()/get_memory_size()` 已就绪）。
+**Post-Condition**：`va_pa_offset`、`npage`、`pages` 已正确设置；内核镜像与页描述符数组所占页均处于 `PageReserved` 状态；其余空闲页已通过 `init_memmap()` 交给管理器。
+
+**Requirements（按顺序）**：
+1. 设 `va_pa_offset = PHYSICAL_MEMORY_OFFSET`；
+2. 取 `mem_base = get_memory_base()`、`mem_size = get_memory_size()`，任一为 0 则 `panic` 终止；
+3. 设 `npage = PPN(mem_base + mem_size)`，并保证 `npage > nbase`；
+4. 设 `pages = (struct Page *)ROUNDUP((uintptr_t)end, PGSIZE)`（放在内核 `end` 之后、按页对齐）；
+5. 把下标 `[0, npage - nbase)` 范围内的所有 Page 描述符先全部 `SetPageReserved`；
+6. 计算首个可分配字节 `freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage)`；
+7. 对区间 `[ROUNDUP(freemem, PGSIZE), ROUNDDOWN(mem_end, PGSIZE))`（若非空）调用 `init_memmap(pa2page(begin), (end_pa - begin) / PGSIZE)`；**没有任何完整空闲页时不得调用**。
+
+## 验收（与 lab2 的 `tools/test_lab2.c` 8 条一致）
+1. `va_pa_offset == PHYSICAL_MEMORY_OFFSET`
+2. `get_memory_base()` / `get_memory_size()` 均非 0
+3. `npage == PPN(mem_base + mem_size)` 且 `npage > nbase`
+4. `pages` 非空、按 `PGSIZE` 对齐、位于 `ROUNDUP(end, PGSIZE)` 之后
+5. `nr_free_pages()` ∈ `(0, npage - nbase]`
+6. `PageReserved(pa2page(PADDR(end)))` 为真（内核镜像尾页保留）
+7. `PageReserved(pa2page(PADDR(pages)))` 为真（页描述符数组保留）
+8. `pa2page(page2pa(q)) == q`（往返一致）
+
+## Requirements（全局）
+- `-Werror` 下无警告；内核无 libc，不得调用 `malloc`/`printf` 等标准库；
+- 注意区分**虚拟地址 / 物理地址 / 页号 / Page 指针**四者；调用 `PADDR`/`pa2page` 之前必须已设好 `va_pa_offset` 与 `pages`。
 ````
+
+**补回说明（2413628-黄乐仁）：**
+
+lab3 的 `page_init()` 与 lab2 完全一致，直接用 lab2 的提示词重新生成并填回即可。填回时重点核对两处 lab2 阶段踩过的坑：
+
+1. **地址类型混淆**：`end` 是内核**虚拟地址**，`freemem` 是「pages 数组末尾」的虚拟地址，与物理的 `mem_end` 比较前都必须先 `PADDR` 转换；`pages` 则要先 `ROUNDUP((uintptr_t)end, PGSIZE)` 按页对齐。
+2. **遗漏保留区**：内核镜像占用的页和**页描述符数组自身占用的页**都要 `PageReserved`。实现里用「先把 `[0, npage - nbase)` 全部 `SetPageReserved`，再从 `freemem` 之后释放空闲页」的方式一次性覆盖两块保留区。
+
+验证：填回后内核能正常启动（`make grade` 不再因缺 `page_init` 而启动失败），后续 Trap 测试在此基础上全部通过。
 
 ### 提示词 1：实现 `RESTORE_ALL` 与 `__alltraps`
 
 ````markdown
 [PROMPT]
+**任务**：修改 `kern/trap/trapentry.S`，在 `//lab3 function1 YOUR CODE` 处补全 `RESTORE_ALL` 宏，并在 `__alltraps` 中建立与 C 函数 `trap(struct trapframe *tf)` 的调用关系，把 `YOUR CODE` 替换为我的学号 `2413628`。
+
+**操作要求**：必须在项目中修改实际文件；只补 `RESTORE_ALL` 与 `__alltraps` 两处，`SAVE_ALL`、`__trapret`、`struct trapframe`、`trap()` 的函数签名一律不动；必须在 `-Werror` 下编译通过。
+
+**输出要求**：使用下方信息，以工程真实定义为准。
 
 [RELY]
+```asm
+/* 寄存器宽度：rv64 下 REGBYTES = 8，STORE = sd，LOAD = ld */
+
+/* struct trapframe 布局（kern/trap/trap.h），栈上共 36 个 slot × 8 字节：
+     gpr[0..31]  // struct pushregs，32 个通用寄存器（下标 = 寄存器号）
+     status      // slot 32 —— sstatus
+     epc         // slot 33 —— sepc
+     badvaddr    // slot 34 —— stval
+     cause       // slot 35 —— scause */
+
+/* 已提供的 SAVE_ALL（不允许修改，RESTORE_ALL 必须与之严格对称）： */
+.macro SAVE_ALL
+    csrw sscratch, sp           // 先把被打断前的 sp 暂存到 sscratch
+    addi sp, sp, -36 * REGBYTES // 在内核栈上开 36 个 slot 的 trapframe
+    STORE x0,  0*REGBYTES(sp)
+    STORE x1,  1*REGBYTES(sp)
+    STORE x3,  3*REGBYTES(sp)
+    ...                         // x4..x31 依次存到对应下标（slot 2 留空，见下）
+    STORE x31, 31*REGBYTES(sp)
+    csrrw s0, sscratch, x0      // 取回原 sp，同时把 sscratch 清 0（标记“来自内核”）
+    csrr s1, sstatus
+    csrr s2, sepc
+    csrr s3, stval
+    csrr s4, scause
+    STORE s0, 2*REGBYTES(sp)    // 原 sp 存到 slot 2
+    STORE s1, 32*REGBYTES(sp)   // sstatus → slot 32
+    STORE s2, 33*REGBYTES(sp)   // sepc    → slot 33
+    STORE s3, 34*REGBYTES(sp)   // stval   → slot 34
+    STORE s4, 35*REGBYTES(sp)   // scause  → slot 35
+.endm
+```
+
+```
+/* RISC-V 调用约定：a0 是第一个参数寄存器；jal 把返回地址写回 ra（x1）。
+   trap() 声明为 void trap(struct trapframe *tf)，入参 tf 就是 trapframe 指针。 */
+/* 返回：sret 会把 sepc 写回 pc，所以 epc 是否被 handler 修正，决定了返回后从哪条指令继续。 */
+```
 
 [GUARANTEE]
+```asm
+RESTORE_ALL            // .macro，恢复被打断现场
+__alltraps             // 入口，SAVE_ALL 之后把 tf 传给 trap()
+```
 
 [SPECIFICATION]
+## RESTORE_ALL
+**Pre-Condition**：`sp` 指向当前内核栈上的完整 trapframe（36 slot，由 `SAVE_ALL` 建立）。
+**Post-Condition**：除 `x0`、`sp` 外的通用寄存器恢复到 trapframe 中保存的值；`sstatus`/`sepc` 已恢复；`sp` 恢复为被打断前的值。
+
+**Requirements**：
+- 恢复顺序必须与 `SAVE_ALL` 的保存布局一一对应（下标 = 槽位号）。
+- `x0` 硬连线为 0，槽位 0 不必也不应被 `LOAD` 覆盖。
+- `sp`（槽位 2）必须**最后**恢复：恢复其他寄存器时要继续用 `sp` 去寻址栈上数据，一旦提前改写 `sp`，后续所有 `LOAD` 都读错位置。
+- 先恢复 `sepc` 与 `sstatus` 没有副作用；`sret` 会读取它们，因此恢复完直接 `sret` 即可回到被打断处。
+- `x1`/`ra` 无需特殊处理：`SAVE_ALL` 已把被打断代码的返回地址存进槽位 1，`RESTORE_ALL` 用 `LOAD x1, 1*REGBYTES(sp)` 恢复即可，期间被 `jal trap` 改写的 `ra` 会被这次 `LOAD` 覆盖。
+- `sscratch` 无需在 `RESTORE_ALL` 中恢复：`SAVE_ALL` 已把它清 0（用作「本次 Trap 来自内核」的标记），下一次 Trap 进入时 `SAVE_ALL` 会重新写入，旧值无需还原。
+
+## __alltraps
+**Pre-Condition**：硬件按 `stvec` 跳转至此；`SAVE_ALL` 已执行完毕，`sp` 指向 trapframe。
+**Post-Condition**：`trap()` 已被调用且入参为 trapframe 指针；从 `trap()` 返回后 `sp` 仍指向同一 trapframe（供后续 `RESTORE_ALL` 使用）。
+
+**Requirements**：
+- 用 `mv a0, sp` 把 trapframe 指针放入参数寄存器 `a0`，再 `jal trap`。
+- 不得在 `jal trap` 之前破坏 `sp`；`trap()` 按调用约定保存/恢复被调用者寄存器，`sp` 由调用者保证不变。
+- 调用结束后落入 `__trapret`（`RESTORE_ALL` + `sret`）。
+- `jal trap` 会改写 `ra`，但被打断代码的 `ra` 已被 `SAVE_ALL` 存入 trapframe 槽位 1，因此此处覆盖 `ra` 是安全的，`RESTORE_ALL` 会从栈上恢复它。
+- `__alltraps` 入口的 `.align(2)` 保证 4 字节对齐，满足 `stvec` 低两位必须为 0（直接模式）的要求。
 ````
 
 **生成的代码出了什么问题、怎么解决的：**
