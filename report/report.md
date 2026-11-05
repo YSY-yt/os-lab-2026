@@ -59,12 +59,6 @@
 
 ### 3.1 本章节的逻辑主线
 
-<!-- 由部分三负责人起稿，全员过目
-     建议围绕：本章在 lab2 的分页内核之上，加入「对硬件事件的响应能力」。
-     核心链路：stvec 指向 __alltraps → 发生 Trap → SAVE_ALL 保存现场 →
-     调用 trap(tf) → trap_dispatch 按 cause 分派 → interrupt_handler / exception_handler →
-     返回 __trapret → RESTORE_ALL 恢复现场 → sret 回到原执行流 -->
-
 本章围绕 **“操作系统如何感知并响应外部事件”** 展开，在 lab2 已经具备内存管理与分页能力的内核之上，加入对**中断（interrupt）**与**异常（exception）**的支持，并用时钟中断来验证整套机制。
 
 整章的核心是打通一条**完整的 Trap 闭环**：
@@ -86,15 +80,6 @@ __trapret  →  RESTORE_ALL 恢复现场  →  sret 回到被打断的地方
 与 lab1/lab2 不同的是，本章第一次让内核**从“顺序执行”变成“可被打断、可被打断后继续”**——这是后面进程、调度、同步等一切机制的基础。
 
 ### 3.2 功能的逐步实现
-
-<!-- 按"为什么是这个顺序"来讲，建议顺序：
-     1. 前置：补回 lab2 的 page_init 与 Best-Fit（为什么：本实验依赖 lab2 的内存管理）
-     2. 设置 Trap 入口：idt_init 写 stvec = __alltraps（为什么：让硬件知道 Trap 往哪跳）
-     3. 保存现场：SAVE_ALL（已提供）、构造 trapframe（为什么：C 函数需要完整上下文）
-     4. 调用 C 处理器：__alltraps 里按调用约定把 tf 传给 trap()（为什么：汇编到 C 的桥）
-     5. 分派与处理：trap_dispatch 按 cause 符号区分中断/异常，交给两个 handler（为什么：不同 Trap 处理方式不同）
-     6. 恢复现场并返回：RESTORE_ALL + sret（为什么：要回到被打断的地方继续执行）
-     7. 时钟中断闭环：clock_init 设置首次事件 → 每次时钟中断重新 arm → ticks 累加（为什么：一次性定时器必须每次都重设） -->
 
 本章按如下顺序逐步实现，每一步都为下一步提供前提：
 
@@ -122,13 +107,6 @@ __trapret  →  RESTORE_ALL 恢复现场  →  sret 回到被打断的地方
 ---
 
 ## 四、实验内容与实现
-
-<!--
-说明：按练习文档中的功能模块顺序组织。
-每个模块下需写清：涉及函数、功能说明、最终提示词、实现迭代过程与遇到的问题。
-课程明确要求报告中说明「每个练习的 spec 是怎么写的、prompt 是怎么写的」，
-以及「使用提示词让 AI 生成代码的过程中出现了什么 bug、以及你是怎么解决的」。
--->
 
 ### 前置：补回 lab2 的实验代码
 
@@ -190,12 +168,111 @@ __alltraps      # 在 SAVE_ALL 之后调用 C 语言 trap(struct trapframe *tf)
 
 **最终提示词：**
 
-<!-- 见 report/prompt.md；此处粘贴最终定稿 -->
+定稿原文如下，全文同时收录于 [`report/prompt.md`](./prompt.md) 第一节「提示词 1」。
+
+````markdown
+[PROMPT]
+**任务**：修改 `kern/trap/trapentry.S`，在 `//lab3 function1 YOUR CODE` 处补全 `RESTORE_ALL` 宏，并在 `__alltraps` 中建立与 C 函数 `trap(struct trapframe *tf)` 的调用关系，把 `YOUR CODE` 替换为我的学号 `2413628`。
+
+**操作要求**：必须在项目中修改实际文件；只补 `RESTORE_ALL` 与 `__alltraps` 两处，`SAVE_ALL`、`__trapret`、`struct trapframe`、`trap()` 的函数签名一律不动；必须在 `-Werror` 下编译通过。
+
+**输出要求**：使用下方信息，以工程真实定义为准。
+
+[RELY]
+```asm
+/* 寄存器宽度：rv64 下 REGBYTES = 8，STORE = sd，LOAD = ld */
+
+/* struct trapframe 布局（kern/trap/trap.h），栈上共 36 个 slot × 8 字节：
+     gpr[0..31]  // struct pushregs，32 个通用寄存器（下标 = 寄存器号）
+     status      // slot 32 —— sstatus
+     epc         // slot 33 —— sepc
+     badvaddr    // slot 34 —— stval
+     cause       // slot 35 —— scause */
+
+/* 已提供的 SAVE_ALL（不允许修改，RESTORE_ALL 必须与之严格对称）： */
+.macro SAVE_ALL
+    csrw sscratch, sp           // 先把被打断前的 sp 暂存到 sscratch
+    addi sp, sp, -36 * REGBYTES // 在内核栈上开 36 个 slot 的 trapframe
+    STORE x0,  0*REGBYTES(sp)
+    STORE x1,  1*REGBYTES(sp)
+    STORE x3,  3*REGBYTES(sp)
+    ...                         // x4..x31 依次存到对应下标（slot 2 留空，见下）
+    STORE x31, 31*REGBYTES(sp)
+    csrrw s0, sscratch, x0      // 取回原 sp，同时把 sscratch 清 0（标记“来自内核”）
+    csrr s1, sstatus
+    csrr s2, sepc
+    csrr s3, stval
+    csrr s4, scause
+    STORE s0, 2*REGBYTES(sp)    // 原 sp 存到 slot 2
+    STORE s1, 32*REGBYTES(sp)   // sstatus → slot 32
+    STORE s2, 33*REGBYTES(sp)   // sepc    → slot 33
+    STORE s3, 34*REGBYTES(sp)   // stval   → slot 34
+    STORE s4, 35*REGBYTES(sp)   // scause  → slot 35
+.endm
+```
+
+```
+/* RISC-V 调用约定：a0 是第一个参数寄存器；jal 把返回地址写回 ra（x1）。
+   trap() 声明为 void trap(struct trapframe *tf)，入参 tf 就是 trapframe 指针。 */
+/* 返回：sret 会把 sepc 写回 pc，所以 epc 是否被 handler 修正，决定了返回后从哪条指令继续。 */
+```
+
+[GUARANTEE]
+```asm
+RESTORE_ALL            // .macro，恢复被打断现场
+__alltraps             // 入口，SAVE_ALL 之后把 tf 传给 trap()
+```
+
+[SPECIFICATION]
+## RESTORE_ALL
+**Pre-Condition**：`sp` 指向当前内核栈上的完整 trapframe（36 slot，由 `SAVE_ALL` 建立）。
+**Post-Condition**：除 `x0`、`sp` 外的通用寄存器恢复到 trapframe 中保存的值；`sstatus`/`sepc` 已恢复；`sp` 恢复为被打断前的值。
+
+**Requirements**：
+- 恢复顺序必须与 `SAVE_ALL` 的保存布局一一对应（下标 = 槽位号）。
+- `x0` 硬连线为 0，槽位 0 不必也不应被 `LOAD` 覆盖。
+- `sp`（槽位 2）必须**最后**恢复：恢复其他寄存器时要继续用 `sp` 去寻址栈上数据，一旦提前改写 `sp`，后续所有 `LOAD` 都读错位置。
+- 先恢复 `sepc` 与 `sstatus` 没有副作用；`sret` 会读取它们，因此恢复完直接 `sret` 即可回到被打断处。
+- `x1`/`ra` 无需特殊处理：`SAVE_ALL` 已把被打断代码的返回地址存进槽位 1，`RESTORE_ALL` 用 `LOAD x1, 1*REGBYTES(sp)` 恢复即可，期间被 `jal trap` 改写的 `ra` 会被这次 `LOAD` 覆盖。
+- `sscratch` 无需在 `RESTORE_ALL` 中恢复：`SAVE_ALL` 已把它清 0（用作「本次 Trap 来自内核」的标记），下一次 Trap 进入时 `SAVE_ALL` 会重新写入，旧值无需还原。
+
+## __alltraps
+**Pre-Condition**：硬件按 `stvec` 跳转至此；`SAVE_ALL` 已执行完毕，`sp` 指向 trapframe。
+**Post-Condition**：`trap()` 已被调用且入参为 trapframe 指针；从 `trap()` 返回后 `sp` 仍指向同一 trapframe（供后续 `RESTORE_ALL` 使用）。
+
+**Requirements**：
+- 用 `mv a0, sp` 把 trapframe 指针放入参数寄存器 `a0`，再 `jal trap`。
+- 不得在 `jal trap` 之前破坏 `sp`；`trap()` 按调用约定保存/恢复被调用者寄存器，`sp` 由调用者保证不变。
+- 调用结束后落入 `__trapret`（`RESTORE_ALL` + `sret`）。
+- `jal trap` 会改写 `ra`，但被打断代码的 `ra` 已被 `SAVE_ALL` 存入 trapframe 槽位 1，因此此处覆盖 `ra` 是安全的，`RESTORE_ALL` 会从栈上恢复它。
+- `__alltraps` 入口的 `.align(2)` 保证 4 字节对齐，满足 `stvec` 低两位必须为 0（直接模式）的要求。
+````
 
 **实现迭代过程：**
 
-<!-- 记录 AI 生成 RESTORE_ALL / __alltraps 时出现的 bug（如寄存器恢复顺序、
-     sp 的特殊处理、tf 传参寄存器用错等）以及解决过程 -->
+**一、提示词的两轮调整**
+
+*第一轮：只说了「恢复寄存器」。* 最初的提示词只有「参照 `SAVE_ALL` 写出 `RESTORE_ALL`，并让 `__alltraps` 调用 `trap()`」。AI 给出的是一版「按槽位顺序依次 `LOAD` 回 32 个通用寄存器」的代码，看起来与 `SAVE_ALL` 一一对称，但忽略了 `sp` 的特殊性——它既是栈指针又是被保存的寄存器，恢复过程中还要拿它去寻址栈上的 trapframe。
+
+*第二轮：把 `SAVE_ALL` 原文与 trapframe 布局贴进 `[RELY]`。* 只说「与 `SAVE_ALL` 对称」，AI 并不知道槽位 2 里存的是什么。重新设计提示词时，把 `SAVE_ALL` 的完整代码、`struct trapframe` 的 36 个 slot 布局、`REGBYTES`/`STORE`/`LOAD` 的宽度约定一并写进 `[RELY]`，并把「`sp` 最后恢复」「`x0` 不恢复」「`sscratch` 无需还原」写成 `Requirements`，生成结果一次通过。
+
+**二、实现过程中处理的问题**
+
+1. **`sp` 必须最后恢复。** 若按槽位序号把 `sp`（slot 2）和通用寄存器一起恢复，后续的 `LOAD` 就会用一个已经改掉的栈指针去寻址，读到的全是错误数据。最终实现先恢复 `sstatus`、`sepc` 与通用寄存器，最后一条才执行 `LOAD x2, 2*REGBYTES(sp)`。
+2. **`jal trap` 会覆盖 `ra`，但不影响返回。** 调用 `trap(tf)` 时 `jal` 把返回地址写进 `ra`，而被打断处的 `ra` 早已由 `SAVE_ALL` 存进 slot 1，`RESTORE_ALL` 会把它恢复回来，因此不必额外保存。
+3. **Test 1 始终 0/35，根因却不在 `RESTORE_ALL`。** 编译通过、Test 2 与 Test 3 正常，唯独寄存器上下文测试全部失败。在 `__trapret` 处下 GDB 断点核对，栈上 32 个通用寄存器与四个 CSR 的数值全部正确，单步走完恢复序列 `t0` 也确实回到了 `0x105`，说明恢复逻辑本身没有问题。于是把断点移到 `ebreak` 返回后的第一条指令，发现该地址上的实际指令是 `addi a2, sp, 36`，而源码对应行是 `li a0, 0x105`——**返回地址错了**。
+
+**根因：** 部分二的 `exception_handler` 中，断点分支硬编码了 `tf->epc += 4`（注释还写着「ebreak 是 4 字节指令」），但内核开启了 C 扩展（`rv64imafdch`），`ebreak` 会被汇编成 **16 位的 `c.ebreak`**。`epc += 4` 于是落到下一条 4 字节指令的正中间，CPU 从那里取指解出垃圾指令：
+
+```asm
+0x...1a00:  9002        ebreak        ← 2 字节（c.ebreak）
+0x...1a02:  10500513    li a0,261     ← 4 字节，占 0x1a02~0x1a05
+0x...1a06:  0ca29863    bne t0,a0,...
+```
+
+**解决：** 与非法指令异常一致，改为**按实际指令长度推进** `epc`——读 `epc` 处的 16 位字，低两位为 `0b11` 表示 32 位指令（+4），否则为 16 位压缩指令（+2）。修复后 Test 1 通过（35/35），`make grade` 达到 100/100。
+
+> 这个问题**表现在部分一的测试上，根因却在部分二的处理器里**，收口阶段由组长统一定位并修复——这是本次分工里最值得记录的一处边界问题。
 
 ---
 
@@ -356,26 +433,26 @@ void exception_handler(struct trapframe *tf);   // 不得为 static
 4. **`static` 会破坏外部调用。** 本文件之外的其他代码会直接调用这两个 handler，若误加 `static` 会导致链接失败。这一点已写进两份提示词的 `[GUARANTEE]` 注释中。
 5. **指导书要求的「关机」与框架不一致。** 指导书建议在统计输出累计达到 `SHUTDOWN_AFTER` 后调用关机接口，但框架中并没有定义这个阈值宏，只有 `libs/sbi.h` 提供的 `sbi_shutdown()`。而本实验的验收需要在内核运行较长时间后确认时钟计数仍在增长，过早关机会让观测窗口提前结束。综合两点，本实现只完成「续期 → 计数 → 输出」的闭环，未加入关机判断。
 
-
-
-
 ---
 
 ## 五、测试与验证
 
 **编译与运行（`make qemu`）：**
 
-<!-- 预期看到一行行的 `100 ticks`（print_ticks 每 100 次时钟中断输出一次） -->
+OpenSBI v1.3 初始化完成后内核正常启动，之后每累计 100 次时钟中断就输出一行 `100 ticks`。能持续不断地打印，说明 `clock_set_next_event()` 在每次中断里都被重新续期——一次性定时器必须反复重设，这正是本实验要验证的「Trap 能反复进出」。
 
 ![make qemu 运行结果](./images/lab3_qemu.png)
 
 **自动评分（`make grade`）：**
 
-<!-- lab3 的 grade.sh 会用三个不同的宏分别重新编译并运行：
-       GRADE_LAB3_CONTEXT  35 分  → [Test 1] Trap entry and breakpoint return: PASS (35/35)
-       GRADE_LAB3_ILLEGAL  25 分  → [Test 2] Illegal instruction return: PASS (25/25)
-       GRADE_LAB3_TIMER    40 分  → [Test 3] Sustained supervisor timer: PASS (40/40)
-     总分 100。截取 Total Score: 100/100 的输出。 -->
+`tools/grade.sh` 会用三个不同的宏分别重新编译并运行内核，三项全部通过：
+
+| 测试 | 检查内容 | 结果 |
+|---|---|---|
+| Test 1 | Trap 入口与断点返回（`GRADE_LAB3_CONTEXT`） | PASS 35/35 |
+| Test 2 | 非法指令返回（`GRADE_LAB3_ILLEGAL`） | PASS 25/25 |
+| Test 3 | Supervisor 时钟持续触发（`GRADE_LAB3_TIMER`） | PASS 40/40 |
+| **总分** | | **100/100** |
 
 ![make grade 评分结果](./images/lab3_grade.png)
 
@@ -384,13 +461,6 @@ void exception_handler(struct trapframe *tf);   // 不得为 static
 ## 六、实验总结与收获
 
 ### 对操作系统的理解
-
-<!-- 要求：
-     1. 列出本实验中重要的知识点，与对应 OS 原理中的知识点，说明含义、关系和差异
-     2. 列出 OS 原理中很重要、但在本实验中没有对应上的知识点
-     可参考方向：中断 vs 异常、特权级与 Trap 委托（medeleg/mideleg）、
-     上下文切换与 trapframe、stvec/sepc/scause/sstatus、时钟中断与定时器、
-     关中断与原子操作、嵌套中断与中断屏蔽 -->
 
 **1. 本实验中重要的知识点，及与 OS 原理中对应知识点的关系**
 
@@ -415,13 +485,6 @@ void exception_handler(struct trapframe *tf);   // 不得为 static
 7. **多核（SMP）与中断亲和性**：本实验假定单 Hart，`ticks` 也是普通全局变量；多核场景下的并发与 IPI 完全未涉及。
 
 ### AI 协作开发的经验
-
-<!-- 要求：结合本实验真实经过写。素材方向：
-     - 汇编类任务（RESTORE_ALL）给 AI 的上下文要包含 SAVE_ALL 的完整内容与 trapframe 布局
-     - sp 的特殊处理是最容易出错的地方
-     - epc 修正与指令长度判断
-     - 时钟中断"一次性定时器必须每次重设"
-     - 本仓库的环境适配（-device loader 在 QEMU 8 下失效） -->
 
 本实验里与 AI 协作印象最深的是**“AI 的想当然假设”**这一类 bug。
 
