@@ -56,6 +56,7 @@
 
     .macro RESTORE_ALL
 
+    #lab3 function1 2413628
     # restore sstatus and sepc first (sepc has no interrupt side effect)
     LOAD s1, 32*REGBYTES(sp)
     LOAD s2, 33*REGBYTES(sp)
@@ -102,6 +103,7 @@
 __alltraps:
     SAVE_ALL
 
+    #lab3 function1 2413628
     # pass the trapframe pointer (sp) to trap(); after trap returns,
     # sp should be the same as before "jal trap"
     mv a0, sp

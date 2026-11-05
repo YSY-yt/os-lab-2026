@@ -127,11 +127,15 @@ void exception_handler(struct trapframe *tf) {
         tf->epc += ((insn & 0x3) == 0x3) ? 4 : 2;
         break;
     }
-    case CAUSE_BREAKPOINT:
+    case CAUSE_BREAKPOINT: {
         cprintf("Breakpoint at 0x%016lx\n", tf->epc);
-        /* ebreak 是 4 字节指令 */
-        tf->epc += 4;
+        /* ebreak 在开启 C 扩展时会被汇编成 16 位的 c.ebreak，
+         * 因此必须按实际指令长度推进 epc，不能一律 +4；
+         * 否则会落到 4 字节指令的中间，执行出垃圾指令。 */
+        uint16_t insn = *(uint16_t *)tf->epc;
+        tf->epc += ((insn & 0x3) == 0x3) ? 4 : 2;
         break;
+    }
     default:
         /* 其他异常本实验不要求具体恢复，打印 Trap frame 后直接返回 */
         cprintf("Unknown exception: cause %d\n", (int)tf->cause);
