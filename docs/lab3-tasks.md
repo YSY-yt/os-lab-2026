@@ -4,7 +4,7 @@
 > 仓库：<https://github.com/YSY-yt/os-lab-2026>　分支：`lab3`
 > 实验指导书：<http://oslab.mobisys.top/lab2026/_book/lab3/lab3.html>
 >
-> **✅ 本实验已完成**： 得分 **100/100**（35 + 25 + 40 三项全部通过）。
+> **✅ 本实验已完成**：`make grade` 得分 **100/100**（35 + 25 + 40 三项全部通过）。
 
 ---
 
