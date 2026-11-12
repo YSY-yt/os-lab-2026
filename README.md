@@ -11,6 +11,7 @@
 - **lab2 部分三（Buddy System）设计思路**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-buddy-design.md>
 - **lab2 收尾清单**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-closing-checklist.md>
 - **lab3 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab3-tasks.md>
+- **lab4 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab4-tasks.md>
 - **在自备电脑上搭建实验环境**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/env-setup.md>
 - **lab1 答辩复习材料**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-review.md>
 
@@ -49,7 +50,7 @@ labx/
 | `lab1` | 比麻雀更小的麻雀（最小可执行内核） | ✅ 已完成 |
 | `lab2` | 物理内存和页表 | ✅ 已完成 |
 | `lab3` | 断，都可以断（中断与异常） | ✅ 已完成 |
-| `lab4` | 进程管理 | 未开始 |
+| `lab4` | 进程管理 | 🚧 进行中（分支已建、环境已适配） |
 | `lab5` | 用户程序 | 未开始 |
 | `lab6` | 进程调度 | 未开始 |
 | `lab7` | 同步互斥 | 未开始 |
@@ -84,6 +85,6 @@ make gdb        # 连接 GDB 调试
 
 | 学号 | 姓名 | 角色 | 负责模块 |
 |------|------|------|----------|
-| 2412796 | 杨斯源 | 组长 | 待定 |
-| 2413628 | 黄乐仁 | 组员 | 待定 |
-| 2410868 | 孙锘梵 | 组员 | 待定 |
+| 2412796 | 杨斯源 | 组长 | lab4 部分三：进程调度 + 报告收口与验证 |
+| 2413628 | 黄乐仁 | 组员 | lab4 部分一：虚拟内存页操作 + 补回 lab2/lab3 代码 |
+| 2410868 | 孙锘梵 | 组员 | lab4 部分二：进程创建及初始化 + 补回 lab2/lab3 代码 |
