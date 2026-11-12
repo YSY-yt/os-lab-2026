@@ -89,7 +89,9 @@ static void *__slob_get_free_pages(gfp_t gfp, int order)
 
 static inline void __slob_free_pages(unsigned long kva, int order)
 {
-	free_pages(kva2page(kva), 1 << order);
+	/* 框架原代码把 unsigned long 直接传给 kva2page(void *)，
+	 * 新版 GCC 下 -Wint-conversion 直接报错，这里补一次显式转换。 */
+	free_pages(kva2page((void *)kva), 1 << order);
 }
 
 static void slob_free(void *b, int size);
