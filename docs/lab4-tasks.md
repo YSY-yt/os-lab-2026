@@ -42,9 +42,20 @@
 | `Makefile`、`tools/grade.sh`：`-device loader,file=...,addr=0x80200000` → **`-kernel bin/ucore.img`** | QEMU ≥ 8 自带 OpenSBI 是 `fw_dynamic` 变体，跳转地址必须由 QEMU 经 `-kernel` 告知；否则 `Domain0 Next Address` 为 `0x0`，**内核永不执行、三项测试全 0** |
 | `kern/init/entry.S`：`boot_page_table_sv39` 补回**低 1G 恒等映射** | 打开分页那一瞬间 PC 还在物理地址 `0x8020xxxx`，这一页没映射会立即取指页错误（lab2/lab3 都踩过） |
 | `kern/mm/default_pmm.c`：删除 `#include <best_fit_pmm.h>` | 工程里没有这个头文件（lab4 只有 `default_pmm.h`），保留则编译直接失败 |
+| `kern/mm/kmalloc.c`：`kva2page(kva)` → `kva2page((void *)kva)` | 骨架把 `unsigned long` 直接传给指针参数，新版 GCC 的 `-Wint-conversion` 直接报错 |
 | `Makefile`：GDB 命令自动探测 `riscv64-unknown-elf-gdb` / `gdb-multiarch` | apt 仓库里没有前者 |
 
 另外 `tools/grade.sh` 的 GDB 断点已改为"跑满固定时间再收日志"——原脚本按老平台约定推导断点地址，在 riscv64 上不可用。
+
+**当前编译现状（已在 WSL 里实测）**：`make -k` 只剩三处错误，全部落在"待补回"的标记位置上，其余文件（含 `entry.S`、`switch.S`、`vmm.c`）都能编译通过：
+
+```
+kern/mm/default_pmm.c: 'free_list' / 'nr_free' undeclared   → 部分二补回 Best-Fit
+kern/trap/trap.c: implicit declaration of interrupt_handler/exception_handler → 部分二补回 lab3
+kern/mm/pmm.c: implicit declaration of page_init            → 部分一补回 lab2
+```
+
+> 注意新版 GCC 把 `-Wimplicit-function-declaration` 当作**错误**，所以函数必须先定义再调用——各处标记位置都在调用点之前，按标记填就行。
 
 **三条避坑提醒：**
 
