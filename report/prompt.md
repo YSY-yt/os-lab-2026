@@ -573,7 +573,13 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf);
 
 **生成的代码出了什么问题、怎么解决的：**
 
-> **待填写（负责人：孙锘梵）**
+两个 handler 的逻辑与 lab3 相同，问题都出在「lab4 的骨架已经变了」：
+
+1. **照搬 lab3 会多出两个没人调用的函数。** lab3 的 `trap.c` 有 `trap_dispatch()` 和 `trap_in_kernel()`，lab4 把分流直接写进了 `trap()`，这两个函数已不存在。提示词限定只补 `interrupt_handler()` 与 `exception_handler()`，其余一概不动。
+2. **插入位置决定能否编译。** lab4 的 `trap()` 在文件末尾，并且它直接调用两个 handler。若按 lab3 的位置写在 `trap()` 之后，基线构建就会报 `kern/trap/trap.c:102: implicit declaration of function 'interrupt_handler'`（`exception_handler` 同理，第 107 行）。提示词的 `[PROMPT]` 因此明确要求「写在中部标记处、位于 `trap()` 之前」，而不是泛泛地说「补在文件里」。
+3. **`epc` 的推进量是 lab3 踩过的坑。** lab3 第一版按「`ebreak` 是 4 字节」写死 `epc += 4`，但内核开了 C 扩展，`ebreak` 被汇编成 2 字节的 `c.ebreak`，返回地址落到下一条 4 字节指令的正中间，取指解出垃圾指令。提示词把「读 `epc` 处 16 位字、低两位为 `0b11` 才是 4 字节」写进 `[SPECIFICATION]` 的 Case 与 Requirements，两个异常分支共用同一套判断。
+
+最后生成结果与 lab3 的实现一致，只是去掉了 lab4 不需要的两个辅助函数。
 
 ---
 
