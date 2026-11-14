@@ -218,7 +218,142 @@ init_main(void *arg)
     return 0;
 }
 
-//LAB4 function2 YOUR CODE
+//LAB4 function2 2410868
+
+// alloc_proc - 分配一个 proc_struct，并把所有字段置为安全初值
+static struct proc_struct *
+alloc_proc(void) {
+    struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
+    if (proc != NULL) {
+        // 先整体清零，避免 kmalloc 回来的垃圾值让测试里的
+        // tf == NULL / flags == 0 / context.ra == 0 断言失败
+        memset(proc, 0, sizeof(struct proc_struct));
+        proc->state = PROC_UNINIT;
+        proc->pid = -1;
+        proc->pgdir = boot_pgdir_pa;   // 写 satp 用的是物理地址
+        proc->need_resched = 0;
+    }
+    return proc;
+}
+
+// copy_mm - 复制当前进程的地址空间（本阶段全是内核线程，mm 为 NULL）
+static int
+copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
+    if (current->mm == NULL) {
+        proc->mm = NULL;
+        return 0;
+    }
+    panic("copy_mm: user process is not supported in lab4.\n");
+}
+
+// copy_thread - 把临时 trapframe 复制到新线程内核栈顶，并设置切换上下文
+static void
+copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
+    // trapframe 放在内核栈的最高处，栈从它下面向下增长
+    proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE) - 1;
+    *(proc->tf) = *tf;
+    // esp == 0 表示内核线程：让它从自己的内核栈顶开始执行，
+    // 否则第一次压栈就会落到非法地址
+    proc->tf->gpr.sp = (esp != 0) ? esp : (uintptr_t)proc->tf;
+    proc->tf->gpr.a0 = 0;                 // 子线程的“返回值”为 0
+    proc->context.ra = (uintptr_t)forkret; // 首次 switch_to 后 ret 到这里
+    proc->context.sp = (uintptr_t)proc->tf;
+}
+
+// kernel_thread - 创建一个以内核函数 fn(arg) 为入口的内核线程
+int
+kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
+    struct trapframe tf;
+    memset(&tf, 0, sizeof(struct trapframe));
+    // entry.S 的约定：a0 = s1，jalr s0
+    tf.gpr.s0 = (uintptr_t)fn;
+    tf.gpr.s1 = (uintptr_t)arg;
+    tf.epc = (uintptr_t)kernel_thread_entry;
+    // 首次 sret 回到 S 态并开中断（SPIE -> SIE），sret 前保持关中断
+    tf.status = (read_csr(sstatus) | SSTATUS_SPP | SSTATUS_SPIE) & ~SSTATUS_SIE;
+    return do_fork(clone_flags, 0, &tf);
+}
+
+// proc_init - 初始化第一个内核线程 idleproc，并由它创建 initproc
+void
+proc_init(void) {
+    int i;
+
+    list_init(&proc_list);
+    for (i = 0; i < HASH_LIST_SIZE; i ++) {
+        list_init(hash_list + i);
+    }
+
+    if ((idleproc = alloc_proc()) == NULL) {
+        panic("cannot alloc idleproc.\n");
+    }
+    // idleproc 直接复用 kern_init 以来的执行现场，所以不设 tf/context
+    idleproc->pid = 0;
+    idleproc->state = PROC_RUNNABLE;
+    idleproc->kstack = (uintptr_t)bootstack;
+    idleproc->need_resched = 1;
+    set_proc_name(idleproc, "idle");
+    nr_process = 1;
+    // 必须在 kernel_thread 之前设置，do_fork 里 initproc->parent = current
+    current = idleproc;
+
+    int pid = kernel_thread(init_main, "Hello world!!", 0);
+    if (pid <= 0) {
+        panic("create init_main failed.\n");
+    }
+    initproc = find_proc(pid);
+    set_proc_name(initproc, "init");
+
+    assert(idleproc != NULL && idleproc->pid == 0);
+    assert(initproc != NULL && initproc->pid == 1);
+}
+
+// do_fork - 创建新进程/线程：分配 PCB 和内核栈，复制上下文，挂入进程表
+int
+do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
+    int ret = -E_NO_FREE_PROC;
+    struct proc_struct *proc;
+    if (nr_process >= MAX_PROCESS) {
+        goto fork_out;
+    }
+    ret = -E_NO_MEM;
+
+    if ((proc = alloc_proc()) == NULL) {
+        goto fork_out;
+    }
+    proc->parent = current;
+
+    if (setup_kstack(proc) != 0) {
+        goto bad_fork_cleanup_proc;
+    }
+    if (copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_kstack;
+    }
+    copy_thread(proc, stack, tf);
+
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        // get_pid 依赖 proc_list 和静态游标，分配与插入必须原子
+        proc->pid = get_pid();
+        hash_proc(proc);
+        list_add(&proc_list, &(proc->list_link));
+        nr_process ++;
+    }
+    local_intr_restore(intr_flag);
+
+    wakeup_proc(proc);   // 把新线程从 PROC_UNINIT 置为 PROC_RUNNABLE
+    ret = proc->pid;
+
+fork_out:
+    return ret;
+
+bad_fork_cleanup_kstack:
+    put_kstack(proc);
+bad_fork_cleanup_proc:
+    kfree(proc);
+    goto fork_out;
+}
 
 
 //LAB4 function3 YOUR CODE
