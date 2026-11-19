@@ -821,17 +821,110 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf);
 
 ````markdown
 [PROMPT]
+**任务**：修改 `kern/process/proc.c`、`kern/schedule/sched.c`、`kern/process/switch.S`，在各自的 `//LAB4 function3 YOUR CODE` 处实现内核线程的调度与上下文切换：`cpu_idle()`、`schedule()`、`proc_run()`、`switch_to()`，并把 `YOUR CODE` 替换为我的学号 `2412796`。
+
+**操作要求**：必须在项目中修改实际文件；只填三个标记处，`sched.c` 已有的 `wakeup_proc()`、`proc.c` 中 function2 区域与既有函数一律不动；`switch.S` 只实现 `switch_to`；必须在 `-Werror` 下编译通过。
+
+**输出要求**：使用下方信息，以工程真实定义为准。
 
 [RELY]
+```c
+// kern/process/proc.h
+struct context {            // 14 个字段，每个 8 字节
+    uintptr_t ra, sp, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+};
+struct proc_struct {
+    enum proc_state state; int pid; int runs; uintptr_t kstack;
+    volatile bool need_resched; struct proc_struct *parent;
+    struct mm_struct *mm; struct context context; struct trapframe *tf;
+    uintptr_t pgdir; uint32_t flags; ... list_entry_t list_link, hash_link;
+};
+extern struct proc_struct *idleproc, *initproc, *current;
+extern list_entry_t proc_list;
+void proc_run(struct proc_struct *proc);
+void cpu_idle(void) __attribute__((noreturn));
+
+// kern/schedule/sched.h
+void schedule(void);
+
+// 链表与状态
+list_next(le) / le2proc(le, list_link) / PROC_RUNNABLE
+
+// kern/mm/pmm.h
+static inline void flush_tlb(void);        // sfence.vma
+
+// kern/mm/pmm.c::enable_paging() —— satp 的正确写法参照
+write_csr(satp, 0x8000000000000000 | (boot_pgdir_pa >> RISCV_PGSHIFT));
+
+// kern/sync/sync.h
+local_intr_save(flag) / local_intr_restore(flag)
+
+// libs/riscv.h
+SATP_MODE_SV39 = 8；RISCV_PGSHIFT = 12
+lsatp() 是 Sv32 遗留，无法表达 Sv39 的 satp，不可使用
+
+// 已提供的 forkret()（kern/process/proc.c）
+static void forkret(void) { forkrets(current->tf); }
+```
+
+```
+// 新线程首次运行：switch_to 末尾的 ret 跳到 context.ra = forkret，
+// 之后 forkrets(tf) → __trapret → sret → kernel_thread_entry → 线程函数。
+```
 
 [GUARANTEE]
+```c
+void cpu_idle(void);
+void schedule(void);
+void proc_run(struct proc_struct *proc);
+void switch_to(struct context *from, struct context *to);   // 汇编实现
+```
 
 [SPECIFICATION]
+## switch_to
+**Pre-Condition**：`a0 = &from->context`，`a1 = &to->context`，两者指向有效的 `struct context`。
+**Post-Condition**：`from` 的 `ra/sp/s0..s11` 已写入其 context；寄存器已恢复为 `to` 的值；`ret` 返回到 `to->ra`。
+**Requirements**：
+- 只保存、恢复被调用者保存寄存器；调用者保存寄存器由编译器在调用点处理。
+- 字段顺序与 `struct context` 一致，偏移量 = 索引 × 8（`s11` 在 104）。
+- 不得触碰 `a0`/`a1` 指向之外的内存；`switch_to` 必须是全局符号。
+
+## schedule
+**Pre-Condition**：`current` 有效，`proc_list` 已初始化。
+**Post-Condition**：`current->need_resched` 已清 0；已选出 `next`（`PROC_RUNNABLE`）；`next != current` 时已调用 `proc_run(next)`；`next->runs` 已加 1；全程关中断。
+**Case 1**（当前不是 idleproc）：从 `current->list_link` 的下一个开始环形遍历。
+**Case 2**（当前是 idleproc）：从 `&proc_list` 开始环形遍历。
+**Case 3**（一圈都没有 `PROC_RUNNABLE`）：`next = idleproc`。
+**Requirements**：
+- `next == current` 时不得调用 `proc_run`。
+- 临界区必须用 `local_intr_save/restore` 包住"清零 + 选线程 + 切换"全过程。
+- 不得在临界区内调用可能睡眠或重新调度的函数。
+
+## proc_run
+**Pre-Condition**：`proc` 有效；若 `proc == current` 直接返回。
+**Post-Condition**：`current == proc`；`satp` 指向 `proc->pgdir`；上下文已切换到 `proc`；返回时运行在 `proc` 的上下文中。
+**Requirements**：
+- 用 `write_csr(satp, (SATP_MODE_SV39 << 60) | (pgdir >> RISCV_PGSHIFT))`，禁用 `lsatp()`。
+- 切页表后必须 `flush_tlb()`。
+- `current` 更新、satp 切换、`switch_to` 三步在同一关中断临界区内完成。
+
+## cpu_idle
+**Post-Condition**：永不返回；`current->need_resched` 为真时调用 `schedule()`。
+**Requirements**：循环体不得阻塞等待，也不得清 `need_resched`（那是 `schedule` 的职责）。
 ````
 
 **生成的代码出了什么问题、怎么解决的：**
 
-> **待填写（负责人：杨斯源）**
+**第一轮：只描述"保存和恢复上下文"。** 生成后虽然能编译，但有两处隐患：`switch_to` 可能按 x86 的 `push/pop` 风格写，而 RISC-V 上应该直接 `sd/ld` 到 `struct context` 的对应偏移；`proc_run` 则可能顺手用了 `libs/riscv.h` 里现成的 `lsatp()` —— 它把模式位写成 Sv32，在 Sv39 下**不报错但不生效**。
+
+**定位与解决：**
+
+1. **把结构体布局贴进 `[RELY]`。** `struct context` 是 14 项，`s11` 在偏移 104（不是 112）。写清"偏移量 = 索引 × 8"后，生成的汇编不再有偏移错误。
+2. **用"禁止"代替"建议"。** 在 `Requirements` 中直接写「禁用 `lsatp()`，改用 `write_csr`」，并给出 `pmm.c::enable_paging()` 的正确写法作参照 —— 这类"能编译、能跑、语义错"的坑只能靠硬约束避免。
+3. **把调度起点的三种情形写进 `Case`。** 最初只写了"找一个就绪线程"，没有规定从哪开始找。`idleproc` 自己也在 `proc_list` 里，若从"自己的下一个"起步，绕一圈很可能又选回自己，`initproc` 迟迟拿不到 CPU。补上 `Case 1/2/3` 后，起点规则被固定下来。
+4. **显式要求 `next != current` 才切换。** 自己切自己是纯粹的浪费，且会让 `runs` 统计失真。
+
+**另外一件不属于提示词、但卡住了评分链路的事**：`make grade` 注入的 `tools/test_lab4.c` 中，`test_lab4_thread()` 返回 `void` 却作为 `int (*)(void *)` 传给 `kernel_thread()`；新版 GCC 把这类不兼容指针转换从警告改成了错误，导致评分构建失败、三项测试全部 "no $qemu.out"。把测试函数签名改成 `int` 后恢复正常 —— 这是测试框架与工具链的兼容问题，因此只改测试文件，不动内核代码。
 
 ---
 
@@ -839,4 +932,7 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf);
 
 | 轮次 | 提示词 | 出现的问题 | 如何修改提示词解决 |
 |------|--------|-----------|-------------------|
-| 1 | | | |
+| 1 | 部分三 · 提示词 0（`switch_to` / `proc_run`） | 只写了"保存和恢复上下文"，汇编可能按 x86 风格写；`satp` 可能误用 Sv32 遗留的 `lsatp()`，在 Sv39 下不报错但不生效 | `[RELY]` 中贴全 `struct context` 的 14 个字段与"偏移量 = 索引 × 8"、给出 `enable_paging()` 的 satp 写法；`Requirements` 改成"禁用 `lsatp()`"这类硬约束 |
+| 2 | 部分三 · 提示词 0（`schedule`） | 没规定遍历起点，`idleproc` 可能绕回自己导致 `initproc` 迟迟不运行；`next == current` 时多做一次无意义切换 | 在 `SPECIFICATION` 中用 `Case 1/2/3` 固定三种起点规则，并要求 `next != current` 才调用 `proc_run` |
+
+> 另有一条不属于提示词迭代、但影响评分链路的问题：`tools/test_lab4.c` 的 `test_lab4_thread()` 在新版 GCC 下因 `void (*)(void *)` 与 `int (*)(void *)` 不兼容而编译失败，已将测试函数返回类型改为 `int`（属环境适配，不改内核代码）。

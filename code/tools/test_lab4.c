@@ -65,7 +65,9 @@ void test_lab4_process_create(void)
 static volatile int test_thread1_ran;
 static volatile int test_thread2_ran;
 
-static void test_lab4_thread(void *arg)
+/* 注意：kernel_thread 的形参是 int (*)(void *)，这里必须返回 int。
+ * 原框架写成 void 函数，新版 GCC 会把这种不兼容指针转换当错误。 */
+static int test_lab4_thread(void *arg)
 {
     int id = (int)(intptr_t)arg;
     int i;

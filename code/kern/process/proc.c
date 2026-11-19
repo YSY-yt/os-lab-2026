@@ -356,4 +356,46 @@ bad_fork_cleanup_proc:
 }
 
 
-//LAB4 function3 YOUR CODE
+//LAB4 function3 2412796
+
+/* proc_run - 让 proc 成为当前运行线程
+ *
+ * 三件事必须按顺序完成，且整体不能被中断打断：
+ *   1. 更新 current —— 全局唯一的"当前线程"指针；
+ *   2. 切换页表 —— 把 satp 指向新线程的页目录物理地址；
+ *   3. 切换上下文 —— switch_to 保存旧线程的 callee-saved 寄存器，
+ *      并恢复新线程的寄存器；返回时就已经在新线程的栈上了。
+ *
+ * 注意 libs/riscv.h 里的 lsatp() 是 Sv32 遗留，无法表达 Sv39 的 satp，
+ * 这里照 pmm.c::enable_paging() 的写法直接写 satp。
+ */
+void
+proc_run(struct proc_struct *proc) {
+    if (proc != current) {
+        bool intr_flag;
+        struct proc_struct *prev = current, *next = proc;
+        local_intr_save(intr_flag);
+        {
+            current = proc;
+            write_csr(satp, ((uintptr_t)SATP_MODE_SV39 << 60) |
+                                (proc->pgdir >> RISCV_PGSHIFT));
+            flush_tlb();
+            switch_to(&(prev->context), &(next->context));
+        }
+        local_intr_restore(intr_flag);
+    }
+}
+
+/* cpu_idle - 空闲线程的执行主体
+ * 没有别的线程可跑时就停在这个循环里；一旦 need_resched 被置位
+ * （例如 proc_init 把 idleproc 的 need_resched 初始化为 1），
+ * 立刻调用 schedule() 让出 CPU。
+ */
+void
+cpu_idle(void) {
+    while (1) {
+        if (current->need_resched) {
+            schedule();
+        }
+    }
+}
