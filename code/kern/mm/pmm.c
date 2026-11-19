@@ -87,7 +87,59 @@ size_t nr_free_pages(void)
     return ret;
 }
 
-//lab2 请补充你在lab2中的代码
+//lab2 function1 2413628
+// page_init - detect the physical memory, reserve the kernel image and the
+// Page descriptor array, then hand the remaining physical memory to the pmm
+// manager as free pages.
+static void page_init(void)
+{
+    extern char end[];
+    uint64_t mem_base, mem_size, mem_end;
+    uintptr_t freemem, begin, end_pa;
+
+    // (1) set the virtual/physical address mapping offset
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
+
+    // (2) obtain the physical memory range reported by the device tree
+    mem_base = get_memory_base();
+    mem_size = get_memory_size();
+    if (mem_base == 0 || mem_size == 0)
+    {
+        panic("page_init: invalid physical memory info from device tree\n");
+    }
+    mem_end = mem_base + mem_size;
+
+    // (3) compute the total number of managed physical pages
+    npage = PPN(mem_end);
+    assert(npage > nbase);
+
+    // (4) place the Page descriptor array right after the kernel image,
+    //     aligned to a page boundary
+    pages = (struct Page *)ROUNDUP((uintptr_t)end, PGSIZE);
+
+    // (5) reserve every managed page first; free pages are released below
+    for (size_t i = 0; i < npage - nbase; i++)
+    {
+        SetPageReserved(pages + i);
+    }
+
+    // (6) the first byte that can be handed to the allocator: right after
+    //     the Page descriptor array
+    freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
+
+    // (7) release the remaining physical memory as free pages
+    begin = freemem;
+    end_pa = mem_end;
+    if (begin < end_pa)
+    {
+        begin = ROUNDUP(begin, PGSIZE);
+        end_pa = ROUNDDOWN(end_pa, PGSIZE);
+        if (begin < end_pa)
+        {
+            init_memmap(pa2page(begin), (end_pa - begin) / PGSIZE);
+        }
+    }
+}
 
 static void enable_paging(void)
 {
@@ -187,7 +239,9 @@ pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create)
         set_page_ref(page, 1);
         uintptr_t pa = page2pa(page);
         memset(KADDR(pa), 0, PGSIZE);
-        *pdep1 = pte_create(page2ppn(page), PTE_U | PTE_V);
+        // RISC-V 规范要求非叶子页表项的 U 位必须为 0，否则严格实现的
+        // MMU（如 QEMU 8.2）会在地址翻译时直接报 page fault。
+        *pdep1 = pte_create(page2ppn(page), PTE_V);
     }
     pde_t *pdep0 = &((pte_t *)KADDR(PDE_ADDR(*pdep1)))[PDX0(la)];
     if (!(*pdep0 & PTE_V))
@@ -200,7 +254,8 @@ pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create)
         set_page_ref(page, 1);
         uintptr_t pa = page2pa(page);
         memset(KADDR(pa), 0, PGSIZE);
-        *pdep0 = pte_create(page2ppn(page), PTE_U | PTE_V);
+        // 同上：中间级页表项只置 V，不置 U。
+        *pdep0 = pte_create(page2ppn(page), PTE_V);
     }
     return &((pte_t *)KADDR(PDE_ADDR(*pdep0)))[PTX(la)];
 }
@@ -220,9 +275,76 @@ struct Page *get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store)
     return NULL;
 }
 
-//LAB4 function1 YOUR CODE
+//LAB4 function1 2413628
+// page_remove_pte - undo the mapping described by ptep: drop one reference to
+// the mapped page, free it when the last reference disappears, then clear the
+// PTE and invalidate the stale TLB entry.
+static void page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep)
+{
+    if (*ptep & PTE_V)
+    {
+        struct Page *page = pte2page(*ptep);
+        if (page_ref_dec(page) == 0)
+        {
+            free_page(page);
+        }
+        *ptep = 0;
+        tlb_invalidate(pgdir, la);
+    }
+}
 
+// page_insert - map the physical page 'page' at linear address 'la' in
+// 'pgdir' with permission 'perm'.  Returns 0 on success, -E_NO_MEM if the
+// intermediate page table could not be allocated.
+int page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm)
+{
+    pte_t *ptep = get_pte(pgdir, la, 1);
+    if (ptep == NULL)
+    {
+        return -E_NO_MEM;
+    }
 
+    // Take the new reference first: if the entry already maps another page,
+    // page_remove_pte() will drop exactly that page's reference.
+    page_ref_inc(page);
+    if (*ptep & PTE_V)
+    {
+        struct Page *old = pte2page(*ptep);
+        if (old == page)
+        {
+            // Re-mapping the same physical page only changes permissions, so
+            // cancel the extra reference and keep the free page count stable.
+            page_ref_dec(page);
+        }
+        else
+        {
+            page_remove_pte(pgdir, la, ptep);
+        }
+    }
+
+    *ptep = pte_create(page2ppn(page), perm);
+    tlb_invalidate(pgdir, la);
+    return 0;
+}
+
+// page_remove - remove the mapping at linear address 'la', if any.
+void page_remove(pde_t *pgdir, uintptr_t la)
+{
+    pte_t *ptep = get_pte(pgdir, la, 0);
+    if (ptep == NULL)
+    {
+        // No page table was ever built for this address: nothing to do.
+        return;
+    }
+    if (*ptep & PTE_V)
+    {
+        page_remove_pte(pgdir, la, ptep);
+    }
+    else
+    {
+        tlb_invalidate(pgdir, la);
+    }
+}
 
 
 
@@ -274,7 +396,8 @@ static void check_pgdir(void)
     assert((ptep = get_pte(boot_pgdir_va, PGSIZE, 0)) != NULL);
     assert(*ptep & PTE_U);
     assert(*ptep & PTE_W);
-    assert(boot_pgdir_va[0] & PTE_U);
+    // 中间级页表项只要求有效（V）；U 位在非叶子项上是保留位，不能置位。
+    assert(boot_pgdir_va[0] & PTE_V);
     assert(page_ref(p2) == 1);
 
     assert(page_insert(boot_pgdir_va, p1, PGSIZE, 0) == 0);
