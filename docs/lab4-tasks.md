@@ -3,7 +3,8 @@
 > 本文件是本小组的内部工作文档，用于明确 lab4 三个部分的负责人、具体工作内容与交付要求。
 > 仓库：<https://github.com/YSY-yt/os-lab-2026>　分支：`lab4`
 > 实验指导书：<http://oslab.mobisys.top/lab2026/_book/lab4/lab4.html>
-> 当前状态：**准备阶段**（分支已建立、环境已适配，功能代码待实现）
+> **✅ 本实验已完成**：`make grade` 得分 **30/30**（PMM / Process Create / Schedule 三项全部通过）。
+> 终版提交：`lab4` 分支 `ecb4f11`。下文的"当前状态""编译不过"等表述均指**开工时的初始状态**，留作记录。
 
 ---
 
@@ -61,7 +62,7 @@ kern/mm/pmm.c: implicit declaration of page_init            → 部分一补回 
 
 1. **必须在交互式 Ubuntu 终端里跑 `make`**（非交互 shell 拿不到工具链 `PATH`）。
 2. **退出 QEMU**：按住 `Ctrl` 再按 `a`，都松开后单独按 `x`。
-3. **分支刚建好时编译不过**——四处 lab2/lab3 代码未补回、五处 `LAB4 functionN YOUR CODE` 未实现。**这是预期的**，正好是任务本身。
+3. **分支刚建好时编译不过**——四处 lab2/lab3 代码未补回、五处 `LAB4 functionN YOUR CODE` 未实现。**这是预期的**，正好是任务本身。（现已全部补齐，`make` 零警告通过、`make grade` 30/30。）
 
 ### 0.4 自动评分是怎么打的
 
@@ -191,17 +192,17 @@ if (*ptep & PTE_V) {
 
 ### 1.3 验收标准
 
-- `make grade` 中 `[Test PMM] PASS`（10 分）
+- ✅ `make grade` 中 `[Test PMM] PASS`（10 分）
 - `make qemu` 里能看到 `check_pgdir() succeeded!`
 
 ### 1.4 完成标准（自检）
 
-- [ ] `[Test PMM]` 通过
-- [ ] 同一物理页重复 `page_insert` 时引用计数不增加、`nr_free_pages()` 不变化
-- [ ] `page_remove` 对未映射地址可重复调用
-- [ ] `//LAB4 function1` 注释保留，`YOUR CODE` 换成学号
-- [ ] `prompt.md` 第一节三份提示词已填全
-- [ ] 报告里写了 bug 与解决过程
+- [x] `[Test PMM]` 通过
+- [x] 同一物理页重复 `page_insert` 时引用计数不增加、`nr_free_pages()` 不变化
+- [x] `page_remove` 对未映射地址可重复调用
+- [x] `//LAB4 function1` 注释保留，`YOUR CODE` 换成学号
+- [x] `prompt.md` 第一节三份提示词已填全
+- [x] 报告里写了 bug 与解决过程
 
 ### 1.5 易错点
 
@@ -268,18 +269,18 @@ schedule() ──► proc_run() ──► switch_to()   // 切到新线程
 
 ### 2.3 验收标准
 
-- `make grade` 中 `[Test Process Create] PASS`（10 分）
+- ✅ `make grade` 中 `[Test Process Create] PASS`（10 分）
 - `make qemu` 中能看到 `this initproc, pid = 1, name = "init"` 等输出（这部分还依赖部分三的调度）
 
 ### 2.4 完成标准（自检）
 
-- [ ] `[Test Process Create]` 通过
-- [ ] `idleproc` 各字段与测试断言一致
-- [ ] `initproc->context.ra != 0`、`context.sp != 0`
-- [ ] Best-Fit 补回后 `basic_check()`/`best_fit_check()` 未被改动或重复定义
-- [ ] 未修改 `trap.c` 中规定以外的函数
-- [ ] 注释保留、`YOUR CODE` 换成学号
-- [ ] `prompt.md` 第二节四份提示词已填全
+- [x] `[Test Process Create]` 通过
+- [x] `idleproc` 各字段与测试断言一致
+- [x] `initproc->context.ra != 0`、`context.sp != 0`
+- [x] Best-Fit 补回后 `basic_check()`/`best_fit_check()` 未被改动或重复定义
+- [x] 未修改 `trap.c` 中规定以外的函数
+- [x] 注释保留、`YOUR CODE` 换成学号
+- [x] `prompt.md` 第二节四份提示词已填全
 
 ### 2.5 易错点
 
@@ -368,17 +369,17 @@ while (1) {
 
 ### 3.3 验收标准
 
-- `make grade` 中 `[Test Schedule] PASS`（10 分）
+- ✅ `make grade` 中 `[Test Schedule] PASS`（10 分）
 - 同时需要 initproc 的正常输出（`this initproc, pid = 1, ...`、`To U: "Hello world!!".`、`To U: "en.., Bye, Bye. :)"`）
 
 ### 3.4 完成标准（自检）
 
-- [ ] `[Test Schedule]` 通过，`make grade` 30/30
-- [ ] `schedule`/`proc_run` 的临界区确实关中断
-- [ ] 页表切换用 `write_csr(satp, ...)`，未使用 `lsatp()`
-- [ ] `switch_to` 只做上下文交换，不掺调度逻辑
-- [ ] 注释保留、`YOUR CODE` 换成学号
-- [ ] `prompt.md` 第三节提示词已填全，迭代记录表已填
+- [x] `[Test Schedule]` 通过，`make grade` 30/30
+- [x] `schedule`/`proc_run` 的临界区确实关中断
+- [x] 页表切换用 `write_csr(satp, ...)`，未使用 `lsatp()`
+- [x] `switch_to` 只做上下文交换，不掺调度逻辑
+- [x] 注释保留、`YOUR CODE` 换成学号
+- [x] `prompt.md` 第三节提示词已填全，迭代记录表已填
 
 ### 3.5 易错点
 
@@ -394,34 +395,34 @@ while (1) {
 
 ### 代码
 
-- [ ] `cd code && make clean && make` 在 `-Werror` 下无警告通过
-- [ ] `make qemu` 能启动到 `initproc` 输出
-- [ ] `make grade` 得到 **30/30**
-- [ ] 四处 lab2/lab3 代码已补回、五处 `LAB4 functionN YOUR CODE` 已填并替换为学号
-- [ ] `SAVE_ALL`、`struct trapframe`、`trap()` 签名未被修改
-- [ ] `basic_check()` / `best_fit_check()` 未被修改或重复实现
-- [ ] `bin/`、`obj/` 未被提交
+- [x] `cd code && make clean && make` 编译通过且无警告（本工程只用 `-Wall`，没有 `-Werror`）
+- [x] `make qemu` 能启动到 `initproc` 输出
+- [x] `make grade` 得到 **30/30**
+- [x] 四处 lab2/lab3 代码已补回、五处 `LAB4 functionN YOUR CODE` 已填并替换为学号
+- [x] `SAVE_ALL`、`struct trapframe`、`trap()` 签名未被修改
+- [x] `basic_check()` / `best_fit_check()` 未被修改或重复实现
+- [x] `bin/`、`obj/` 未被提交
 
 ### 报告
 
-- [ ] 六节齐全，**全文无"待填写"**
-- [ ] 每个模块都有「最终提示词」**和**「实现迭代过程」，无空标题
-- [ ] 报告要求第 4 条（每个练习的 spec/prompt 怎么写）已覆盖
-- [ ] 报告要求第 5 条（AI 生成代码的 bug 与解决）已覆盖
-- [ ] 知识点对应表、未覆盖清单已写
-- [ ] 三道 Challenge 思考题已答
-- [ ] 三处「负责人」已署名，分工表与完成日期已填
+- [x] 六节齐全，**全文无"待填写"**
+- [x] 每个模块都有「最终提示词」**和**「实现迭代过程」，无空标题
+- [x] 报告要求第 4 条（每个练习的 spec/prompt 怎么写）已覆盖
+- [x] 报告要求第 5 条（AI 生成代码的 bug 与解决）已覆盖
+- [x] 知识点对应表、未覆盖清单已写
+- [x] 三道 Challenge 思考题已答
+- [x] 三处「负责人」已署名，分工表与完成日期已填
 
 ### 提示词与图片
 
-- [ ] `prompt.md` 三节齐全，迭代记录表已填
-- [ ] `report/images/` 下有 `lab4_qemu.png` 与 `lab4_grade.png`
-- [ ] 报告中的图片链接在 GitHub 上能正常显示
+- [x] `prompt.md` 三节齐全，迭代记录表已填
+- [x] `report/images/` 下有 `lab4_qemu.png` 与 `lab4_grade.png`
+- [x] 报告中的图片链接在 GitHub 上能正常显示
 
 ### 分支
 
-- [ ] 成果在 `lab4` 分支，根下只有 `code/` 与 `report/`
-- [ ] 已 `git push`
+- [x] 成果在 `lab4` 分支，根下只有 `code/` 与 `report/`
+- [x] 已 `git push`
 
 ---
 
@@ -476,3 +477,28 @@ git pull && git add -A && git commit -m "lab4: ..." && git push
 > 7. 列出你认为 OS 原理中很重要、但在本实验中没有对应上的知识点。
 >
 > 注意有"lab4"的注释，代码中所有需要完成的地方（challenge 除外）都有"lab4"和"YOUR CODE"的注释，请在提交时特别注意保持注释，并将"YOUR CODE"替换为自己的学号。
+
+---
+
+## 七、完成记录
+
+| 部分 | 负责人 | 完成内容 | 提交 |
+|---|---|---|---|
+| 部分一 | 2413628-黄乐仁 | 补回 `page_init()`、`RESTORE_ALL`/`__alltraps`；实现 `page_insert()`/`page_remove()` | `df42d22`（代码）、`af5a7e9`（报告） |
+| 部分二 | 2410868-孙锘梵 | 补回 Best-Fit、两个 handler；实现 `alloc_proc`/`proc_init`/`kernel_thread`/`do_fork`/`copy_thread`/`copy_mm` | `508a019`（代码）、`e79ea02`（报告） |
+| 部分三 | 2412796-杨斯源 | 实现 `schedule`/`proc_run`/`switch_to`/`cpu_idle`；报告 3.1/3.2/五/六节、Challenge 与 `prompt.md` 汇总；全量验证 | `c2d538b`（代码与报告）、`ecb4f11`（截图与收口） |
+
+**最终验证**
+
+- `make` 编译通过、无警告（本工程只用 `-Wall`，没有 `-Werror`）
+- `make qemu`：`check_pgdir() succeeded!` → `check_vmm() succeeded.` → initproc 三行输出；末尾 `do_exit` 的 panic 为框架占位，属预期
+- `make grade`：**30/30**（PMM 10 + Process Create 10 + Schedule 10）
+
+**过程中额外修掉的骨架/工具链问题**（均已提交在 `lab4` 分支）
+
+1. `default_pmm.c` 引用了不存在的 `<best_fit_pmm.h>`
+2. `kmalloc.c` 把 `unsigned long` 传给 `kva2page(void *)` —— 新版 GCC 报错
+3. `Makefile` / `grade.sh` 的 `-device loader` 在 QEMU 8 下失效，改 `-kernel`
+4. 启动页表缺低 1G 恒等映射 —— 开分页瞬间取指页错误
+5. `tools/test_lab4.c` 的 `test_lab4_thread` 返回 `void` 却传给 `int (*)(void *)` —— GCC 14 起视为错误
+6. `get_pte()` 中间级页表项误置 `PTE_U` —— RISC-V 规定非叶子 PTE 的 U 位必须为 0
