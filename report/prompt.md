@@ -31,11 +31,72 @@
 ````markdown
 [PROMPT]
 
+**任务**：修改 `code/kern/mm/pmm.c`，在 `//lab2 请补充你在lab2中的代码` 标记处补回 lab2 实现的 `page_init()`。函数必须保持 `static void page_init(void)` 的原型，因为本文件的 `pmm_init()` 已经以无参形式调用它。
+
+**操作要求**：必须在项目中修改实际文件，而不是只展示代码；只在标记处插入函数，保留文件已有的 `enable_paging()`、`boot_map_segment()` 等框架代码。`page_init()` 要在 `check_alloc_page()`、`check_pgdir()` 之前完成，否则 `alloc_page()` 与页表分配拿不到空闲页。
+
+**输出要求**：直接进行文件操作。不要照搬 lab2 的 `best_fit_*` 或 `satp_virtual/satp_physical` 等 lab4 已改名的全局变量；本文件的全局变量叫 `pages`、`npage`、`va_pa_offset`、`nbase`。
+
 [RELY]
+
+```c
+// 全局变量（本文件已声明）
+struct Page *pages;              // Page 描述符数组，内核虚拟地址
+size_t npage;                    // 物理页总数（绝对页号）
+uint_t va_pa_offset;             // 内核虚拟地址 - 物理地址
+const size_t nbase = DRAM_BASE / PGSIZE;
+
+// 宏与工具函数
+#define PGSIZE 4096
+#define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)
+ROUNDUP(x, align) / ROUNDDOWN(x, align)
+SetPageReserved(struct Page *page)
+#define PADDR(kva)   // 内核虚拟地址 -> 物理地址（要求 kva >= KERNBASE）
+#define KADDR(pa)    // 物理地址 -> 内核虚拟地址
+pa2page(uintptr_t pa)
+init_memmap(struct Page *base, size_t n)   // 本文件静态封装，调用 pmm_manager->init_memmap
+uint64_t get_memory_base(void);            // kern/driver/dtb.h，DTB 解析出的 RAM 起始物理地址
+uint64_t get_memory_size(void);            // kern/driver/dtb.h，RAM 大小（字节）
+```
 
 [GUARANTEE]
 
+```c
+static void page_init(void);
+```
+
+不得修改函数签名；不得改动 `pmm_init()` 中 `page_init()` 的调用位置。
+
 [SPECIFICATION]
+
+## page_init
+
+**Pre-Condition**：
+- `dtb_init()` 已经解析完设备树，`get_memory_base()` / `get_memory_size()` 返回有效的 RAM 范围。
+- 内核已被 OpenSBI 加载到物理地址 `0x80200000`，当前运行在 `KERNBASE` 开始的高地址映射下。
+- `pmm_manager` 已初始化，但还没有任何空闲页。
+
+**Post-Condition**：
+- `va_pa_offset == PHYSICAL_MEMORY_OFFSET`。
+- `npage == PPN(mem_end)`，`pages` 指向 `end` 之后按 4KB 对齐的 Page 描述符数组，数组覆盖 `[nbase, npage)` 的全部页。
+- `[nbase, freemem)` 范围的页全部处于 `PG_reserved`；`[freemem, mem_end)` 已通过 `init_memmap()` 登记为空闲页（按页对齐）。
+
+**Case 1（DTB 信息无效）**：
+- `mem_base == 0 || mem_size == 0` 时 `panic`，不要继续用 0 页初始化 PMM。
+
+**Case 2（正常路径）**：
+1. `va_pa_offset = PHYSICAL_MEMORY_OFFSET`；
+2. 取 `mem_base`、`mem_size`，令 `mem_end = mem_base + mem_size`；
+3. `npage = PPN(mem_end)`，断言 `npage > nbase`；
+4. `pages = (struct Page *)ROUNDUP((uintptr_t)end, PGSIZE)`；
+5. 对 `i in [0, npage - nbase)` 执行 `SetPageReserved(pages + i)`；
+6. `freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage)`；
+7. `begin = ROUNDUP(freemem, PGSIZE)`、`end_pa = ROUNDDOWN(mem_end, PGSIZE)`，若 `begin < end_pa` 则 `init_memmap(pa2page(begin), (end_pa - begin) / PGSIZE)`。
+
+**Requirements**：
+- `pages` 与 `freemem` 的地址空间不能混用：`pages` 是内核虚拟地址，`freemem` 必须是物理地址才能交给 `init_memmap()`。
+- 第 5 步必须先全部置为 reserved，再只把数组之后的内存释放为 free；反过来做会把内核镜像和 Page 数组本身也交给分配器。
+- 不得在 `page_init()` 里调用 `alloc_page()`。
 ````
 
 ### 提示词 1：补回 lab3 的 `RESTORE_ALL` 与 `__alltraps`
@@ -46,11 +107,75 @@
 ````markdown
 [PROMPT]
 
+**任务**：修改 `code/kern/trap/trapentry.S`，在两处 `#lab3:填写你在lab3中实现的代码` 补回 lab3 的中断返回与 trap 调用代码：`RESTORE_ALL` 宏的完整实现，以及 `__alltraps` 中 `SAVE_ALL` 之后调用 `trap()` 的代码。
+
+**操作要求**：必须在项目中修改实际文件。保留已有的 `SAVE_ALL` 宏、`__trapret`、`forkrets` 标签和最后的 `sret`，只填充两处标记。
+
+**输出要求**：直接进行文件操作，代码必须是合法的 RISC-V 汇编，能通过 `riscv64-unknown-elf-as`。
+
 [RELY]
+
+```asm
+// SAVE_ALL 在 sp 上构造的 trapframe（36 个 REGBYTES）：
+//   0*  : 未使用（x0 硬连线为 0，本骨架不保存）
+//   1*  : x1 (ra)
+//   2*  : 原 sp（由 csrr s0, sscratch 得到）
+//   3*~31*: x3 ~ x31
+//   32* : sstatus
+//   33* : sepc
+//   34* : stval (badvaddr)
+//   35* : scause
+//
+// 已提供的宏/符号：
+STORE reg, offset(sp)
+LOAD  reg, offset(sp)
+REGBYTES                      // 寄存器字节数
+__trapret                     // RESTORE_ALL + sret
+forkrets: move sp, a0; j __trapret
+```
 
 [GUARANTEE]
 
+```asm
+.macro RESTORE_ALL
+    // 必须完整实现
+.endm
+
+__alltraps:
+    SAVE_ALL
+    // 必须补上：mv a0, sp; jal trap
+```
+
 [SPECIFICATION]
+
+## RESTORE_ALL
+
+**Pre-Condition**：
+- `sp` 指向 `SAVE_ALL` 构造的 trapframe 起始地址。
+
+**Post-Condition**：
+- `sstatus`、`sepc` 以及除 `x0` 外的全部通用寄存器都恢复到陷入前的值，`sp` 最后恢复，随后执行 `sret` 返回。
+
+**Case 1（正常返回）**：
+1. 先 `LOAD s1, 32*REGBYTES(sp)`、`LOAD s2, 33*REGBYTES(sp)`，再 `csrw sepc, s2`、`csrw sstatus, s1`；
+2. 依次 `LOAD x1`、`x3`~`x31`；
+3. 最后 `LOAD x2, 2*REGBYTES(sp)`。
+
+**Requirements**：
+- `x0` 不能写入（写入无效），不要在宏里 `LOAD x0`。
+- `x2 (sp)` 必须最后恢复；提前恢复会让后续 `LOAD` 的基址全部错误。
+- 不要恢复 `sscratch`：每次陷入 `SAVE_ALL` 都会重新写入。
+
+## __alltraps 中的调用
+
+**Pre-Condition**：
+- `SAVE_ALL` 已完成，`sp` 是 trapframe 指针。
+
+**Post-Condition**：
+- 调用 `trap(tf)` 时 `a0 == sp`；`trap()` 返回后 `sp` 保持不变，继续执行 `__trapret`。
+
+**Requirements**：
+- 只能写 `mv a0, sp` 与 `jal trap` 两条指令；不要改 `forkrets` 的 `move sp, a0; j __trapret`，首次运行新线程依赖它。
 ````
 
 ### 提示词 2：实现 `page_insert()` 与 `page_remove()`
@@ -58,16 +183,121 @@
 ````markdown
 [PROMPT]
 
+**任务**：修改 `code/kern/mm/pmm.c`，在 `//LAB4 function1 YOUR CODE` 标记处实现 `page_insert()` 与 `page_remove()`，可以额外增加一个 `static void page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep)` 辅助函数。
+
+**操作要求**：必须在项目中修改实际文件，而不是只展示代码。不要修改 `check_alloc_page()`、`check_pgdir()`、`check_boot_pgdir()` 的测试逻辑（除下文要求的一处端口断言外）；保留 `//LAB4 function1` 注释并把 `YOUR CODE` 换成本人学号。
+
+**环境约束**：本工程运行在 QEMU 8.2 的 Sv39 上，MMU 会严格执行 RISC-V 规范中"非叶子页表项的 U 位必须为 0"的规定。`get_pte()` 创建中间级页表项时只能置 `PTE_V`，不能置 `PTE_U`；`check_pgdir()` 里从 x86 移植来的 `assert(boot_pgdir_va[0] & PTE_U)` 应改为检查 `PTE_V`。否则 `check_boot_pgdir()` 第一次真正访问映射地址时会在地址翻译阶段触发 store page fault。
+
+**输出要求**：直接进行文件操作，使用下面 [RELY]、[GUARANTEE]、[SPECIFICATION] 的信息，以工程真实代码为准。
+
 [RELY]
+
+```c
+pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create);
+struct Page *get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store);
+void tlb_invalidate(pde_t *pgdir, uintptr_t la);
+struct Page *pte2page(pte_t pte);
+ppn_t page2ppn(struct Page *page);
+uintptr_t page2pa(struct Page *page);
+pte_t pte_create(uintptr_t ppn, int type);   // 返回值已经包含 PTE_V
+int page_ref_inc(struct Page *page);
+int page_ref_dec(struct Page *page);         // 返回减少后的引用计数
+int page_ref(struct Page *page);
+#define free_page(page) free_pages(page, 1)
+
+#define PTE_V 0x001
+#define PTE_R 0x002
+#define PTE_W 0x004
+#define PTE_X 0x008
+#define PTE_U 0x010
+#define E_NO_MEM 4
+```
+
+调用方约束（来自 `check_pgdir()` / `check_boot_pgdir()` / `test_lab4_pmm_basic()`）：
+- `perm` 可以是 0（只建立映射，不给 R/W）；
+- 同一物理页可以重复 `page_insert()` 到同一地址，只改权限；
+- 同一地址可以从一个物理页改映射到另一个物理页；
+- `page_remove()` 可以对同一地址连续调用，也可以对从未映射的地址调用。
 
 [GUARANTEE]
 
+```c
+int  page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm);
+void page_remove(pde_t *pgdir, uintptr_t la);
+
+// 可选但推荐
+static void page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep);
+```
+
 [SPECIFICATION]
+
+## page_remove_pte
+
+**Pre-Condition**：
+- `ptep` 是 `pgdir` 中对应 `la` 的末级页表项指针，且 `*ptep & PTE_V`。
+
+**Post-Condition**：
+- 原物理页的引用计数减 1；减到 0 时调用 `free_page()`；`*ptep == 0`；对应 TLB 项已失效。
+
+**Case 1（引用计数仍大于 0）**：
+- 只减引用并清空页表项，不释放物理页。
+
+**Case 2（最后一个引用）**：
+- `page_ref_dec(page) == 0` 时 `free_page(page)`。
+
+**Requirements**：
+- 页表项内容、引用计数、TLB 三者必须同步；清空 `*ptep` 必须发生在释放页之前或之后都可以，但不能漏。
+
+## page_insert
+
+**Pre-Condition**：
+- `pgdir` 是页目录内核虚拟地址；`page` 是合法 Page 描述符；`la` 任意；`perm` 是要写入的权限位（不含 `PTE_V`）。
+
+**Post-Condition**：
+- 成功返回 0，`la` 对应的页表项为 `pte_create(page2ppn(page), perm)`，`page` 的引用计数因这次映射净增 1（改映射同一页时净增 0），TLB 已刷新。
+- 中间级页表分配失败时返回 `-E_NO_MEM`，且不留下半完成映射。
+
+**Case 1（`get_pte(..., 1)` 返回 NULL）**：
+- 直接返回 `-E_NO_MEM`。
+
+**Case 2（原地址未映射）**：
+- 新页引用计数 +1，写入页表项。
+
+**Case 3（原地址已映射到同一物理页）**：
+- 只改权限。先按新映射 +1，再回退这次 +1，使净增为 0；`nr_free_pages()` 不变化。
+
+**Case 4（原地址映射到其他物理页）**：
+- 新页引用计数 +1，然后对旧页调用 `page_remove_pte()` 撤销旧映射（旧页引用计数 -1，必要时释放）。
+
+**Requirements**：
+- 必须先 `page_ref_inc(page)` 再处理旧项，否则 Case 3/4 的回退顺序容易把计数弄错。
+- 最后写 `*ptep = pte_create(...)` 并 `tlb_invalidate(pgdir, la)`。
+- `pte_create()` 内部已经 OR 了 `PTE_V`，不要再重复加。
+
+## page_remove
+
+**Pre-Condition**：
+- `la` 可以已映射、未映射，或从未建立过页表。
+
+**Post-Condition**：
+- 若 `la` 有有效映射则撤销；否则不做任何修改。函数无返回值，可重复调用。
+
+**Case 1（`get_pte(..., 0)` 返回 NULL）**：
+- 安静返回。
+
+**Case 2（页表项存在但无效）**：
+- 只需 `tlb_invalidate()`（可选），不要解引用页框。
+
+**Case 3（有效映射）**：
+- 调用 `page_remove_pte()`。
 ````
 
 **生成的代码出了什么问题、怎么解决的：**
 
-> **待填写（负责人：黄乐仁）**
+最初按 x86 版思路直接 `page_ref_inc` 后覆盖页表项，没有区分旧页，导致同一物理页重复映射时引用计数多 1、旧页也释放不掉；`page_remove` 也没有判空。按"先 inc 新页、再区分 `old == page` / `old != page`"重写后，`check_pgdir()` 通过。
+
+真正卡住的是 `check_pgdir() succeeded!` 之后内核直接重启：串口第二次打印 `DTB Init`、`HartID: 256`，最后在 `page_init()` 里因为 DTB 内存信息为 0 而 panic。用 `qemu -d int` 看到 `store_page_fault, epc=strcpy, tval=0x100`；用 GDB 读 `satp` 与 root→L1→L0 页表链，确认每一级 PTE 都是有效且带 R/W 的，说明 `page_insert()` 本身没写错。继续做单变量对照实验：手工在 root 级建立同一映射，页表项 `U=0` 时能正常访问，`U=1` 时就 fault。查规范后确认**非叶子 PTE 的 U 位是保留位、必须为 0**，而骨架 `get_pte()` 给两级中间页表项都置了 `PTE_U | PTE_V`。QEMU 8.2 在地址翻译时严格执行这条规则，而 `check_boot_pgdir()` 是内核第一次真正访问这类映射；此时 `idt_init()` 还没执行，`stvec` 仍是固件留下的 `0x80200000`，trap 被当成重新进入内核入口，所以表现为"二次启动"。修复为：`get_pte()` 的中间级只置 `PTE_V`，并把 `check_pgdir()` 中从 x86 移植来的 `assert(boot_pgdir_va[0] & PTE_U)` 改为检查 `PTE_V`。修复后 `check_pgdir()`、`check_boot_pgdir()` 均打印 succeeded，`[Test PMM] PASS`。
 
 ---
 
