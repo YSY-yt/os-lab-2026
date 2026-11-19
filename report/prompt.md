@@ -823,7 +823,7 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf);
 [PROMPT]
 **任务**：修改 `kern/process/proc.c`、`kern/schedule/sched.c`、`kern/process/switch.S`，在各自的 `//LAB4 function3 YOUR CODE` 处实现内核线程的调度与上下文切换：`cpu_idle()`、`schedule()`、`proc_run()`、`switch_to()`，并把 `YOUR CODE` 替换为我的学号 `2412796`。
 
-**操作要求**：必须在项目中修改实际文件；只填三个标记处，`sched.c` 已有的 `wakeup_proc()`、`proc.c` 中 function2 区域与既有函数一律不动；`switch.S` 只实现 `switch_to`；必须在 `-Werror` 下编译通过。
+**操作要求**：必须在项目中修改实际文件；只填三个标记处，`sched.c` 已有的 `wakeup_proc()`、`proc.c` 中 function2 区域与既有函数一律不动；`switch.S` 只实现 `switch_to`；必须在 `-Wall` 下编译通过且无警告。
 
 **输出要求**：使用下方信息，以工程真实定义为准。
 

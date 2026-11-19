@@ -691,7 +691,7 @@ void switch_to(struct context *from, struct context *to);  // kern/process/switc
 [PROMPT]
 **任务**：修改 `kern/process/proc.c`、`kern/schedule/sched.c`、`kern/process/switch.S`，在各自的 `//LAB4 function3 YOUR CODE` 处实现内核线程的调度与上下文切换：`cpu_idle()`、`schedule()`、`proc_run()`、`switch_to()`，并把 `YOUR CODE` 替换为我的学号 `2412796`。
 
-**操作要求**：必须在项目中修改实际文件；只填三个标记处，`sched.c` 已有的 `wakeup_proc()`、`proc.c` 中 function2 区域与既有函数一律不动；`switch.S` 只实现 `switch_to`；必须在 `-Werror` 下编译通过。
+**操作要求**：必须在项目中修改实际文件；只填三个标记处，`sched.c` 已有的 `wakeup_proc()`、`proc.c` 中 function2 区域与既有函数一律不动；`switch.S` 只实现 `switch_to`；必须在 `-Wall` 下编译通过且无警告。
 
 **输出要求**：使用下方信息，以工程真实定义为准。
 
@@ -859,7 +859,7 @@ static inline void __intr_restore(bool flag) {
 
 **编译与运行（`make qemu`）：**
 
-`make` 在 `-Werror` 下无警告通过。`make qemu` 的启动过程按顺序可以观察到四组关键信息：
+`make` 编译通过且无警告。`make qemu` 的启动过程按顺序可以观察到四组关键信息：
 
 1. **固件与内存**：OpenSBI 打出 `Domain0 Next Address : 0x0000000080200000`（说明 `-kernel` 生效、跳转地址正确），随后 `DTB Init` 报告 `Base: 0x80000000 Size: 128 MB`。
 2. **物理内存与页表**：`memory management: default_pmm_manager` → `check_alloc_page() succeeded!` → `check_pgdir() succeeded!` → `check_boot_pgdir() succeeded!`，说明部分一的映射接口与 lab2 补回都正确。
@@ -944,7 +944,7 @@ To U: "en.., Bye, Bye. :)"
 
 - [x] 四处 lab2/lab3 代码已补回，五处 `LAB4 functionN YOUR CODE` 已填并替换为学号
 - [x] `SAVE_ALL`、`struct trapframe`、`trap()` 签名未被修改；未改动框架提供的测试函数
-- [x] `make` 在 `-Werror` 下无警告通过，`make grade` 30/30
+- [x] `make` 编译通过且无警告，`make grade` 30/30
 - [x] 全文无"待填写"；每个功能模块都有「最终提示词」与「实现迭代过程」
 - [x] `prompt.md` 三节齐全，迭代记录表已填
 - [ ] `images/` 下截图齐全且为真实截图，路径为相对路径

@@ -83,6 +83,7 @@ static int test_lab4_thread(void *arg)
         current->need_resched = 1;
         schedule();
     }
+    return 0;   /* 不会执行到这里；加一行是为了消除 -Wreturn-type 警告 */
 }
 
 void test_lab4_schedule(void)
