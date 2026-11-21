@@ -12,6 +12,7 @@
 - **lab2 收尾清单**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab2-closing-checklist.md>
 - **lab3 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab3-tasks.md>
 - **lab4 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab4-tasks.md>
+- **lab5 任务分工与交付要求**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab5-tasks.md>
 - **在自备电脑上搭建实验环境**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/env-setup.md>
 - **lab1 答辩复习材料**：<https://github.com/YSY-yt/os-lab-2026/blob/main/docs/lab1-review.md>
 
@@ -51,7 +52,7 @@ labx/
 | `lab2` | 物理内存和页表 | ✅ 已完成 |
 | `lab3` | 断，都可以断（中断与异常） | ✅ 已完成 |
 | `lab4` | 进程管理 | ✅ 已完成 |
-| `lab5` | 用户程序 | 未开始 |
+| `lab5` | 用户程序 | 🚧 进行中（分支已建、环境已适配） |
 | `lab6` | 进程调度 | 未开始 |
 | `lab7` | 同步互斥 | 未开始 |
 | `lab8` | 文件系统 | 未开始 |
@@ -85,6 +86,6 @@ make gdb        # 连接 GDB 调试
 
 | 学号 | 姓名 | 角色 | 负责模块 |
 |------|------|------|----------|
-| 2412796 | 杨斯源 | 组长 | lab4 部分三：进程调度 + 报告收口与验证 |
-| 2413628 | 黄乐仁 | 组员 | lab4 部分一：虚拟内存页操作 + 补回 lab2/lab3 代码 |
-| 2410868 | 孙锘梵 | 组员 | lab4 部分二：进程创建及初始化 + 补回 lab2/lab3 代码 |
+| 2412796 | 杨斯源 | 组长 | lab5 部分三：进程复制与退出 + 报告收口与验证 |
+| 2413628 | 黄乐仁 | 组员 | lab5 部分一：用户态系统调用 |
+| 2410868 | 孙锘梵 | 组员 | lab5 部分二：创建加载第一个用户进程 |
